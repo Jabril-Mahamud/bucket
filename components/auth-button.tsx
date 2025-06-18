@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Button } from "./ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "./logout-button";
-import { Library } from "lucide-react";
+import { Library, User, BookOpen } from "lucide-react";
+import { Badge } from "./ui/badge";
 
 export async function AuthButton() {
   const supabase = await createClient();
@@ -11,24 +12,52 @@ export async function AuthButton() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  return user ? (
-    <div className="flex items-center gap-4">
-      <Link href="/library">
-        <Button variant="outline" size="sm">
-          <Library className="h-4 w-4 mr-2" />
-          Library
-        </Button>
-      </Link>
-      <span className="text-sm">Hey, {user.email}!</span>
-      <LogoutButton />
-    </div>
-  ) : (
-    <div className="flex gap-2">
-      <Button asChild size="sm" variant={"outline"}>
-        <Link href="/auth/login">Sign in</Link>
+  if (user) {
+    // Get user's file count for display
+    const { count } = await supabase
+      .from('files')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+
+    return (
+      <div className="flex items-center gap-3">
+        <Link href="/library">
+          <Button variant="outline" size="sm" className="gap-2 h-9">
+            <Library className="h-4 w-4" />
+            Library
+            {count !== null && count > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs">
+                {count}
+              </Badge>
+            )}
+          </Button>
+        </Link>
+        
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md">
+          <User className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">
+            {user.email?.split('@')[0]}
+          </span>
+        </div>
+        
+        <LogoutButton />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Button asChild size="sm" variant="outline" className="gap-2">
+        <Link href="/auth/login">
+          <User className="h-4 w-4" />
+          Sign in
+        </Link>
       </Button>
-      <Button asChild size="sm" variant={"default"}>
-        <Link href="/auth/sign-up">Sign up</Link>
+      <Button asChild size="sm" variant="default" className="gap-2">
+        <Link href="/auth/sign-up">
+          <BookOpen className="h-4 w-4" />
+          Get Started
+        </Link>
       </Button>
     </div>
   );
