@@ -1,105 +1,128 @@
-<a href="https://demo-nextjs-with-supabase.vercel.app/">
-  <img alt="Next.js and Supabase Starter Kit - the fastest way to build apps with Next.js and Supabase" src="https://demo-nextjs-with-supabase.vercel.app/opengraph-image.png">
-  <h1 align="center">Next.js and Supabase Starter Kit</h1>
-</a>
+# 📚 Personal Library
 
-<p align="center">
- The fastest way to build apps with Next.js and Supabase
-</p>
+> A modern, web-based personal library management system - think Calibre, but beautiful and accessible everywhere.
 
-<p align="center">
-  <a href="#features"><strong>Features</strong></a> ·
-  <a href="#demo"><strong>Demo</strong></a> ·
-  <a href="#deploy-to-vercel"><strong>Deploy to Vercel</strong></a> ·
-  <a href="#clone-and-run-locally"><strong>Clone and run locally</strong></a> ·
-  <a href="#feedback-and-issues"><strong>Feedback and issues</strong></a>
-  <a href="#more-supabase-examples"><strong>More Examples</strong></a>
-</p>
-<br/>
+## ✨ What is this?
 
-## Features
+Personal Library is a modern alternative to Calibre that solves its biggest pain points:
 
-- Works across the entire [Next.js](https://nextjs.org) stack
-  - App Router
-  - Pages Router
-  - Middleware
-  - Client
-  - Server
-  - It just works!
-- supabase-ssr. A package to configure Supabase Auth to use cookies
-- Password-based authentication block installed via the [Supabase UI Library](https://supabase.com/ui/docs/nextjs/password-based-auth)
-- Styling with [Tailwind CSS](https://tailwindcss.com)
-- Components with [shadcn/ui](https://ui.shadcn.com/)
-- Optional deployment with [Supabase Vercel Integration and Vercel deploy](#deploy-your-own)
-  - Environment variables automatically assigned to Vercel project
+- **Beautiful, responsive UI** that works on any device
+- **Web-based access** - no desktop app required
+- **Cloud sync** - access your library anywhere
+- **Simple, clean interface** - not overwhelming like traditional library software
+- **Progress tracking** - never lose your place in books or audiobooks
 
-## Demo
+## 🚀 Current Features
 
-You can view a fully working demo at [demo-nextjs-with-supabase.vercel.app](https://demo-nextjs-with-supabase.vercel.app/).
+### 📁 File Management
 
-## Deploy to Vercel
+- **Drag & drop upload** with progress tracking
+- **Multiple format support**: PDF, EPUB, TXT, MP3, WAV, M4A, AAC, OGG
+- **Search and filtering** by filename and file type
+- **Grid and list views** for browsing your collection
 
-Vercel deployment will guide you through creating a Supabase account and project.
+### 📖 Reading Experience  
 
-After installation of the Supabase integration, all relevant environment variables will be assigned to the project so the deployment is fully functioning.
+- **Built-in PDF viewer** with progress saving
+- **Audio player** with seeking, volume control, and position memory
+- **Progress tracking** across all devices
+- **Download and offline access**
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&project-name=nextjs-with-supabase&repository-name=nextjs-with-supabase&demo-title=nextjs-with-supabase&demo-description=This+starter+configures+Supabase+Auth+to+use+cookies%2C+making+the+user%27s+session+available+throughout+the+entire+Next.js+app+-+Client+Components%2C+Server+Components%2C+Route+Handlers%2C+Server+Actions+and+Middleware.&demo-url=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2F&external-id=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&demo-image=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2Fopengraph-image.png)
+### 🎨 Beautiful Interface
 
-The above will also clone the Starter kit to your GitHub, you can clone that locally and develop locally.
+- **Modern design** with shadcn/ui components
+- **Dark/light mode** support
+- **Responsive layout** - perfect on mobile, tablet, and desktop
+- **Smooth animations** and intuitive interactions
 
-If you wish to just develop locally and not deploy to Vercel, [follow the steps below](#clone-and-run-locally).
+### 🔐 Secure & Private
 
-## Clone and run locally
+- **User authentication** with Supabase Auth
+- **Private file storage** - only you can access your files
+- **Row-level security** protecting your data
 
-1. You'll first need a Supabase project which can be made [via the Supabase dashboard](https://database.new)
+## 🎯 Roadmap - Improving on Calibre
 
-2. Create a Next.js app using the Supabase Starter template npx command
+### 📊 Enhanced Metadata (Coming Soon)
+
+- Cover art upload and display
+- Book metadata (author, series, genre, publication date)
+- Smart collections and custom tags
+- Advanced search by metadata
+
+### 🔄 Format Conversion
+
+- PDF ↔ EPUB conversion
+- Format optimization
+- Batch processing
+
+### 📈 Reading Analytics
+
+- Reading statistics and insights
+- Library overview dashboard
+- Progress visualization
+
+## 🛠️ Tech Stack
+
+- **Frontend**: Next.js 15, TypeScript, Tailwind CSS
+- **UI Components**: shadcn/ui, Lucide React
+- **Backend**: Supabase (Database, Auth, Storage)
+- **Deployment**: Vercel-ready
+
+## 🚀 Quick Start
+
+1. **Clone and install**
 
    ```bash
-   npx create-next-app --example with-supabase with-supabase-app
+   git clone <your-repo-url>
+   cd personal-library
+   npm install
    ```
+
+2. **Set up Supabase**
+   - Create a new project at [supabase.com](https://supabase.com)
+   - Copy `.env.example` to `.env.local`
+   - Add your Supabase URL and anon key
+
+3. **Run database migrations**
 
    ```bash
-   yarn create next-app --example with-supabase with-supabase-app
+   # The migration file creates the necessary tables and storage buckets
+   # Run it in your Supabase SQL editor: supabase/migrations/20250618201506_create_file_library.sql
    ```
 
-   ```bash
-   pnpm create next-app --example with-supabase with-supabase-app
-   ```
-
-3. Use `cd` to change into the app's directory
-
-   ```bash
-   cd with-supabase-app
-   ```
-
-4. Rename `.env.example` to `.env.local` and update the following:
-
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=[INSERT SUPABASE PROJECT URL]
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=[INSERT SUPABASE PROJECT API ANON KEY]
-   ```
-
-   Both `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` can be found in [your Supabase project's API settings](https://supabase.com/dashboard/project/_?showConnect=true)
-
-5. You can now run the Next.js local development server:
+4. **Start development**
 
    ```bash
    npm run dev
    ```
 
-   The starter kit should now be running on [localhost:3000](http://localhost:3000/).
+## 📁 Project Structure
 
-6. This template comes with the default shadcn/ui style initialized. If you instead want other ui.shadcn styles, delete `components.json` and [re-install shadcn/ui](https://ui.shadcn.com/docs/installation/next)
+```md
+├── app/
+│   ├── library/            # Library pages
+│   ├── api/files/          # File serving API
+│   └── auth/               # Authentication pages
+├── components/
+│   ├── file/               # File management components
+│   └── ui/                 # shadcn/ui components
+├── lib/
+│   └── supabase/           # Supabase client setup
+└── supabase/
+    └── migrations/         # Database schema
+```
 
-> Check out [the docs for Local Development](https://supabase.com/docs/guides/getting-started/local-development) to also run Supabase locally.
+## 🤝 Contributing
 
-## Feedback and issues
+This is a personal project, but contributions are welcome! See our [Todo List](TODO.md) for planned features.
 
-Please file feedback and issues over on the [Supabase GitHub org](https://github.com/supabase/supabase/issues/new/choose).
+## 📄 License
 
-## More Supabase examples
+MIT License - feel free to use this for your own personal library!
 
-- [Next.js Subscription Payments Starter](https://github.com/vercel/nextjs-subscription-payments)
-- [Cookie-based Auth and the Next.js 13 App Router (free course)](https://youtube.com/playlist?list=PL5S4mPUpp4OtMhpnp93EFSo42iQ40XjbF)
-- [Supabase Auth and the Next.js App Router](https://github.com/supabase/supabase/tree/master/examples/auth/nextjs)
+---
+
+**Why not just use Calibre?**
+
+Calibre is powerful but feels dated and is desktop-only. Personal Library brings library management into the modern web era with a clean, accessible interface that works everywhere. Perfect for the 2025+ era of reading across multiple devices.
