@@ -9,6 +9,7 @@ export interface BookMetadata {
   description?: string;
   isbn?: string;
   series_number?: number;
+  cover_art_path?: string;
 }
 
 /**
