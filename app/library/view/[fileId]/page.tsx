@@ -6,5 +6,10 @@ interface PageProps {
 
 export default async function Page({ params }: PageProps) {
   const { fileId } = await params;
-  return <FileViewer fileId={fileId} />;
+
+  return (
+    <div className="p-6">
+      <FileViewer fileId={fileId} />;
+    </div>
+  );
 }
