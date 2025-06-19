@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { 
   Upload, 
   File, 
@@ -16,9 +17,11 @@ import {
   Music,
   BookOpen,
   X,
-  RotateCcw
+  RotateCcw,
+  Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { parseMetadataFromFilename, BookMetadata } from "@/lib/metadata-utils";
 
 interface UploadFile {
   file: File;
@@ -26,6 +29,7 @@ interface UploadFile {
   progress: number;
   status: 'uploading' | 'success' | 'error';
   error?: string;
+  metadata?: BookMetadata;
 }
 
 export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void }) {
@@ -45,6 +49,13 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
         // Create file path: user_id/filename
         const filePath = `${user.id}/${uploadFile.file.name}`;
         
+        // Update progress to show upload starting
+        setUploadFiles(prev => prev.map(f => 
+          f.id === uploadFile.id 
+            ? { ...f, progress: 10 }
+            : f
+        ));
+
         // Upload to Supabase Storage
         const { data: storageData, error: storageError } = await supabase.storage
           .from('user-files')
@@ -61,7 +72,7 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             : f
         ));
 
-        // Save metadata to database
+        // Save metadata to database with extracted metadata
         const { error: dbError } = await supabase
           .from('files')
           .insert({
@@ -69,7 +80,14 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             filename: uploadFile.file.name,
             file_path: storageData.path,
             file_type: uploadFile.file.type,
-            file_size: uploadFile.file.size
+            file_size: uploadFile.file.size,
+            // Include extracted metadata
+            title: uploadFile.metadata?.title || null,
+            author: uploadFile.metadata?.author || null,
+            series: uploadFile.metadata?.series || null,
+            genre: uploadFile.metadata?.genre || null,
+            language: uploadFile.metadata?.language || 'en',
+            description: uploadFile.metadata?.description || null,
           });
 
         if (dbError) throw dbError;
@@ -100,12 +118,18 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
   }, [supabase, onUploadComplete]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    const newFiles: UploadFile[] = acceptedFiles.map(file => ({
-      file,
-      id: Math.random().toString(36).substring(7),
-      progress: 0,
-      status: 'uploading' as const
-    }));
+    const newFiles: UploadFile[] = acceptedFiles.map(file => {
+      // Extract metadata from filename
+      const metadata = parseMetadataFromFilename(file.name);
+      
+      return {
+        file,
+        id: Math.random().toString(36).substring(7),
+        progress: 0,
+        status: 'uploading' as const,
+        metadata
+      };
+    });
     
     setUploadFiles(prev => [...prev, ...newFiles]);
     handleUploadFiles(newFiles);
@@ -181,7 +205,7 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             <div className="space-y-2">
               <p className="text-lg font-medium text-primary">Drop your files here</p>
               <p className="text-sm text-muted-foreground">
-                Release to upload
+                Release to upload with automatic metadata detection
               </p>
             </div>
           ) : (
@@ -193,6 +217,11 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
                 <p className="text-sm text-muted-foreground">
                   or click to browse your files
                 </p>
+              </div>
+              
+              <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+                <Sparkles className="h-3 w-3" />
+                <span>Automatic metadata detection included</span>
               </div>
               
               <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
@@ -282,6 +311,27 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
                       </div>
                     </div>
                     
+                    {/* Show detected metadata */}
+                    {uploadFile.metadata && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {uploadFile.metadata.title && (
+                          <Badge variant="secondary" className="text-xs">
+                            📖 {uploadFile.metadata.title}
+                          </Badge>
+                        )}
+                        {uploadFile.metadata.author && (
+                          <Badge variant="outline" className="text-xs">
+                            ✍️ {uploadFile.metadata.author}
+                          </Badge>
+                        )}
+                        {uploadFile.metadata.genre && (
+                          <Badge variant="outline" className="text-xs">
+                            🏷️ {uploadFile.metadata.genre}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    
                     {uploadFile.status === 'uploading' && (
                       <div className="mt-2">
                         <Progress value={uploadFile.progress} className="h-2" />
@@ -294,7 +344,7 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
                     
                     {uploadFile.status === 'success' && (
                       <p className="text-xs text-green-600 mt-1">
-                        ✓ Upload completed successfully
+                        ✓ Upload completed with metadata detection
                       </p>
                     )}
                     
