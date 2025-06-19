@@ -27,9 +27,14 @@ import {
   SortAsc,
   Grid3X3,
   List,
-  Plus
+  Plus,
+  Edit,
+  User,
+  Tag,
+  Star,
 } from "lucide-react";
 import { FileUpload } from "./file-upload";
+import { EditMetadataDialog } from "./edit-metadata-dialog";
 import Link from "next/link";
 
 interface LibraryFile {
@@ -39,14 +44,24 @@ interface LibraryFile {
   file_type: string;
   file_size: number;
   uploaded_at: string;
+  title?: string;
+  author?: string;
+  series?: string;
+  genre?: string;
+  publication_date?: string;
+  language?: string;
+  description?: string;
+  cover_art_path?: string;
+  isbn?: string;
+  series_number?: number;
   progress?: {
     progress_percentage: number;
     last_position: string;
   };
 }
 
-type SortOption = 'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'size-asc' | 'size-desc';
-type FilterOption = 'all' | 'pdf' | 'text' | 'audio';
+type SortOption = 'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'size-asc' | 'size-desc' | 'title-asc' | 'title-desc' | 'author-asc' | 'author-desc';
+type FilterOption = 'all' | 'pdf' | 'text' | 'audio' | 'with-metadata' | 'without-metadata';
 type ViewMode = 'grid' | 'list';
 
 export function LibraryPage() {
@@ -101,10 +116,16 @@ export function LibraryPage() {
   useEffect(() => {
     let filtered = [...files];
 
-    // Apply search filter
+    // Apply search filter (now includes metadata)
     if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
       filtered = filtered.filter(file =>
-        file.filename.toLowerCase().includes(searchQuery.toLowerCase())
+        file.filename.toLowerCase().includes(query) ||
+        file.title?.toLowerCase().includes(query) ||
+        file.author?.toLowerCase().includes(query) ||
+        file.series?.toLowerCase().includes(query) ||
+        file.genre?.toLowerCase().includes(query) ||
+        file.description?.toLowerCase().includes(query)
       );
     }
 
@@ -118,6 +139,10 @@ export function LibraryPage() {
             return file.file_type.startsWith('text/') || file.file_type === 'application/epub+zip';
           case 'audio':
             return file.file_type.startsWith('audio/');
+          case 'with-metadata':
+            return file.title || file.author || file.series || file.genre;
+          case 'without-metadata':
+            return !file.title && !file.author && !file.series && !file.genre;
           default:
             return true;
         }
@@ -131,6 +156,14 @@ export function LibraryPage() {
           return a.filename.localeCompare(b.filename);
         case 'name-desc':
           return b.filename.localeCompare(a.filename);
+        case 'title-asc':
+          return (a.title || a.filename).localeCompare(b.title || b.filename);
+        case 'title-desc':
+          return (b.title || b.filename).localeCompare(a.title || a.filename);
+        case 'author-asc':
+          return (a.author || '').localeCompare(b.author || '');
+        case 'author-desc':
+          return (b.author || '').localeCompare(a.author || '');
         case 'date-asc':
           return new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime();
         case 'date-desc':
@@ -187,10 +220,25 @@ export function LibraryPage() {
     });
   };
 
+  const getCoverImageUrl = (file: LibraryFile) => {
+    if (!file.cover_art_path) return null;
+    const { data } = supabase.storage
+      .from('cover-art')
+      .getPublicUrl(file.cover_art_path);
+    return data.publicUrl;
+  };
+
   const deleteFile = async (file: LibraryFile) => {
-    if (!confirm(`Are you sure you want to delete "${file.filename}"?`)) return;
+    if (!confirm(`Are you sure you want to delete "${file.title || file.filename}"?`)) return;
 
     try {
+      // Delete cover art if exists
+      if (file.cover_art_path) {
+        await supabase.storage
+          .from('cover-art')
+          .remove([file.cover_art_path]);
+      }
+
       // Delete from storage
       const { error: storageError } = await supabase.storage
         .from('user-files')
@@ -288,7 +336,7 @@ export function LibraryPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search your library..."
+                placeholder="Search by title, author, series, or filename..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 h-11"
@@ -308,6 +356,8 @@ export function LibraryPage() {
                     <SelectItem value="pdf">PDFs</SelectItem>
                     <SelectItem value="text">Books</SelectItem>
                     <SelectItem value="audio">Audio</SelectItem>
+                    <SelectItem value="with-metadata">With Metadata</SelectItem>
+                    <SelectItem value="without-metadata">Without Metadata</SelectItem>
                   </SelectContent>
                 </Select>
                 
@@ -319,8 +369,12 @@ export function LibraryPage() {
                   <SelectContent>
                     <SelectItem value="date-desc">Newest First</SelectItem>
                     <SelectItem value="date-asc">Oldest First</SelectItem>
-                    <SelectItem value="name-asc">Name A-Z</SelectItem>
-                    <SelectItem value="name-desc">Name Z-A</SelectItem>
+                    <SelectItem value="title-asc">Title A-Z</SelectItem>
+                    <SelectItem value="title-desc">Title Z-A</SelectItem>
+                    <SelectItem value="author-asc">Author A-Z</SelectItem>
+                    <SelectItem value="author-desc">Author Z-A</SelectItem>
+                    <SelectItem value="name-asc">Filename A-Z</SelectItem>
+                    <SelectItem value="name-desc">Filename Z-A</SelectItem>
                     <SelectItem value="size-desc">Largest First</SelectItem>
                     <SelectItem value="size-asc">Smallest First</SelectItem>
                   </SelectContent>
@@ -384,152 +438,258 @@ export function LibraryPage() {
         </Card>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-          {filteredFiles.map((file) => (
-            <Card key={file.id} className="group hover:shadow-lg transition-all duration-200 hover:-translate-y-1 border-2 hover:border-primary/20">
-              <CardHeader className="pb-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0">
-                    {getFileIcon(file.file_type)}
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <CardTitle className="text-sm sm:text-base line-clamp-2 leading-tight" title={file.filename}>
-                      {file.filename}
-                    </CardTitle>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                      <Badge variant={getFileTypeBadgeVariant(file.file_type)} className="text-xs w-fit">
-                        {getFileTypeLabel(file.file_type)}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {formatFileSize(file.file_size)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                {/* Progress Bar */}
-                {file.progress && file.progress.progress_percentage > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Progress</span>
-                      <span className="font-medium">{Math.round(file.progress.progress_percentage)}%</span>
-                    </div>
-                    <div className="w-full bg-secondary rounded-full h-2">
-                      <div 
-                        className="bg-primary h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${file.progress.progress_percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-                
-                {/* Date */}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Calendar className="h-3 w-3 flex-shrink-0" />
-                  <span className="truncate">{formatDate(file.uploaded_at)}</span>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                  <Link href={`/library/view/${file.id}`} className="flex-1">
-                    <Button size="sm" className="w-full gap-2 text-xs sm:text-sm">
-                      <Eye className="h-3 w-3" />
-                      Open
-                    </Button>
-                  </Link>
-                  <div className="flex gap-2">
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => downloadFile(file)}
-                      className="gap-1 flex-1 sm:flex-none"
-                    >
-                      <Download className="h-3 w-3" />
-                      <span className="sm:hidden">Download</span>
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => deleteFile(file)}
-                      className="gap-1 flex-1 sm:flex-none hover:bg-destructive hover:text-destructive-foreground"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      <span className="sm:hidden">Delete</span>
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        // List View
-        <div className="space-y-3">
-          {filteredFiles.map((file) => (
-            <Card key={file.id} className="group hover:shadow-md transition-all duration-200">
-              <CardContent className="p-3 sm:p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex-shrink-0">
+          {filteredFiles.map((file) => {
+            const coverUrl = getCoverImageUrl(file);
+            const displayTitle = file.title || file.filename;
+            
+            return (
+              <Card key={file.id} className="group hover:shadow-lg transition-all duration-200 hover:-translate-y-1 border-2 hover:border-primary/20">
+                {/* Cover Image or Icon */}
+                <div className="relative aspect-[3/4] rounded-t-xl overflow-hidden bg-muted/30">
+                  {coverUrl ? (
+                    <img 
+                      src={coverUrl} 
+                      alt={displayTitle}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
                       {getFileIcon(file.file_type)}
                     </div>
+                  )}
+                  
+                  {/* Metadata indicator */}
+                  {(file.title || file.author) && (
+                    <div className="absolute top-2 right-2">
+                      <Badge variant="secondary" className="text-xs bg-white/90 text-gray-800">
+                        <Star className="h-3 w-3 mr-1" />
+                        Metadata
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+
+                <CardHeader className="pb-2">
+                  <div className="space-y-2">
+                    <CardTitle className="text-sm sm:text-base line-clamp-2 leading-tight" title={displayTitle}>
+                      {displayTitle}
+                    </CardTitle>
                     
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-1">
-                        <h3 className="font-medium truncate text-sm sm:text-base">{file.filename}</h3>
-                        <Badge variant={getFileTypeBadgeVariant(file.file_type)} className="text-xs w-fit">
-                          {getFileTypeLabel(file.file_type)}
+                    {/* Author */}
+                    {file.author && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <User className="h-3 w-3" />
+                        <span className="truncate">{file.author}</span>
+                      </div>
+                    )}
+                    
+                    {/* Series */}
+                    {file.series && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Tag className="h-3 w-3" />
+                        <span className="truncate">
+                          {file.series_number ? `${file.series} #${file.series_number}` : file.series}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant={getFileTypeBadgeVariant(file.file_type)} className="text-xs">
+                        {getFileTypeLabel(file.file_type)}
+                      </Badge>
+                      {file.genre && (
+                        <Badge variant="outline" className="text-xs">
+                          {file.genre}
                         </Badge>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
-                        <span>{formatFileSize(file.file_size)}</span>
-                        <span className="hidden sm:inline">•</span>
-                        <span>{formatDate(file.uploaded_at)}</span>
-                        {file.progress && file.progress.progress_percentage > 0 && (
-                          <>
-                            <span className="hidden sm:inline">•</span>
-                            <span className="text-primary font-medium">
-                              {Math.round(file.progress.progress_percentage)}% complete
-                            </span>
-                          </>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
+                </CardHeader>
+                
+                <CardContent className="space-y-4">
+                  {/* Progress Bar */}
+                  {file.progress && file.progress.progress_percentage > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Progress</span>
+                        <span className="font-medium">{Math.round(file.progress.progress_percentage)}%</span>
+                      </div>
+                      <div className="w-full bg-secondary rounded-full h-2">
+                        <div 
+                          className="bg-primary h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${file.progress.progress_percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* File info */}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{formatDate(file.uploaded_at)}</span>
+                    <span>•</span>
+                    <span>{formatFileSize(file.file_size)}</span>
+                  </div>
 
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-                    <Link href={`/library/view/${file.id}`} className="flex-1 sm:flex-none">
-                      <Button size="sm" className="gap-2 w-full sm:w-auto">
+                  {/* Action Buttons */}
+                  <div className="flex flex-col gap-2">
+                    <Link href={`/library/view/${file.id}`} className="flex-1">
+                      <Button size="sm" className="w-full gap-2 text-xs sm:text-sm">
                         <Eye className="h-3 w-3" />
                         Open
                       </Button>
                     </Link>
                     <div className="flex gap-2">
+                      <EditMetadataDialog 
+                        file={file} 
+                        onSave={fetchFiles}
+                        trigger={
+                          <Button size="sm" variant="outline" className="gap-1 flex-1">
+                            <Edit className="h-3 w-3" />
+                            <span className="hidden sm:inline">Edit</span>
+                          </Button>
+                        }
+                      />
                       <Button 
                         size="sm" 
                         variant="outline"
                         onClick={() => downloadFile(file)}
-                        className="flex-1 sm:flex-none"
+                        className="gap-1 flex-1"
                       >
                         <Download className="h-3 w-3" />
-                        <span className="sm:hidden ml-1">Download</span>
+                        <span className="hidden sm:inline">Download</span>
                       </Button>
                       <Button 
                         size="sm" 
                         variant="outline"
                         onClick={() => deleteFile(file)}
-                        className="flex-1 sm:flex-none hover:bg-destructive hover:text-destructive-foreground"
+                        className="gap-1 hover:bg-destructive hover:text-destructive-foreground"
                       >
                         <Trash2 className="h-3 w-3" />
-                        <span className="sm:hidden ml-1">Delete</span>
                       </Button>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      ) : (
+        // List View
+        <div className="space-y-3">
+          {filteredFiles.map((file) => {
+            const coverUrl = getCoverImageUrl(file);
+            const displayTitle = file.title || file.filename;
+            
+            return (
+              <Card key={file.id} className="group hover:shadow-md transition-all duration-200">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {/* Cover or Icon */}
+                      <div className="flex-shrink-0 w-12 h-16 rounded overflow-hidden bg-muted/30">
+                        {coverUrl ? (
+                          <img 
+                            src={coverUrl} 
+                            alt={displayTitle}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            {getFileIcon(file.file_type)}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-1">
+                          <h3 className="font-medium truncate text-sm sm:text-base">{displayTitle}</h3>
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant={getFileTypeBadgeVariant(file.file_type)} className="text-xs">
+                              {getFileTypeLabel(file.file_type)}
+                            </Badge>
+                            {file.genre && (
+                              <Badge variant="outline" className="text-xs">
+                                {file.genre}
+                              </Badge>
+                            )}
+                            {(file.title || file.author) && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Star className="h-3 w-3 mr-1" />
+                                Metadata
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-1 text-xs sm:text-sm text-muted-foreground">
+                          {file.author && (
+                            <div className="flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              <span>{file.author}</span>
+                            </div>
+                          )}
+                          
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                            <span>{formatFileSize(file.file_size)}</span>
+                            <span className="hidden sm:inline">•</span>
+                            <span>{formatDate(file.uploaded_at)}</span>
+                            {file.progress && file.progress.progress_percentage > 0 && (
+                              <>
+                                <span className="hidden sm:inline">•</span>
+                                <span className="text-primary font-medium">
+                                  {Math.round(file.progress.progress_percentage)}% complete
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                      <Link href={`/library/view/${file.id}`} className="flex-1 sm:flex-none">
+                        <Button size="sm" className="gap-2 w-full sm:w-auto">
+                          <Eye className="h-3 w-3" />
+                          Open
+                        </Button>
+                      </Link>
+                      <div className="flex gap-2">
+                        <EditMetadataDialog 
+                          file={file} 
+                          onSave={fetchFiles}
+                          trigger={
+                            <Button size="sm" variant="outline" className="flex-1 sm:flex-none">
+                              <Edit className="h-3 w-3" />
+                              <span className="sm:hidden ml-1">Edit</span>
+                            </Button>
+                          }
+                        />
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => downloadFile(file)}
+                          className="flex-1 sm:flex-none"
+                        >
+                          <Download className="h-3 w-3" />
+                          <span className="sm:hidden ml-1">Download</span>
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => deleteFile(file)}
+                          className="flex-1 sm:flex-none hover:bg-destructive hover:text-destructive-foreground"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span className="sm:hidden ml-1">Delete</span>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

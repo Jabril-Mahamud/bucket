@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { 
   Upload, 
   File, 
@@ -18,10 +17,13 @@ import {
   BookOpen,
   X,
   RotateCcw,
-  Sparkles
+  Sparkles,
+  User,
+  Tag,
+  Calendar
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { parseMetadataFromFilename, BookMetadata } from "@/lib/metadata-utils";
+import { parseMetadataFromFilename, BookMetadata, validateMetadata } from "@/lib/metadata-utils";
 
 interface UploadFile {
   file: File;
@@ -72,6 +74,15 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             : f
         ));
 
+        // Validate metadata before saving
+        if (uploadFile.metadata) {
+          const validationErrors = validateMetadata(uploadFile.metadata);
+          if (validationErrors.length > 0) {
+            console.warn('Metadata validation errors:', validationErrors);
+            // Still save but with warnings
+          }
+        }
+
         // Save metadata to database with extracted metadata
         const { error: dbError } = await supabase
           .from('files')
@@ -81,13 +92,17 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             file_path: storageData.path,
             file_type: uploadFile.file.type,
             file_size: uploadFile.file.size,
-            // Include extracted metadata
+            // Include extracted metadata with proper null handling
             title: uploadFile.metadata?.title || null,
             author: uploadFile.metadata?.author || null,
             series: uploadFile.metadata?.series || null,
             genre: uploadFile.metadata?.genre || null,
+            publication_date: uploadFile.metadata?.publication_date || null,
             language: uploadFile.metadata?.language || 'en',
             description: uploadFile.metadata?.description || null,
+            isbn: uploadFile.metadata?.isbn || null,
+            series_number: uploadFile.metadata?.series_number || null,
+            cover_art_path: null, // Will be uploaded separately if needed
           });
 
         if (dbError) throw dbError;
@@ -174,6 +189,24 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
     if (file.type === 'application/epub+zip') 
       return <BookOpen className="h-5 w-5 text-indigo-500" />;
     return <File className="h-5 w-5 text-slate-500" />;
+  };
+
+  const formatMetadataDisplay = (metadata: BookMetadata) => {
+    const items = [];
+    if (metadata.title) items.push({ icon: BookOpen, label: 'Title', value: metadata.title });
+    if (metadata.author) items.push({ icon: User, label: 'Author', value: metadata.author });
+    if (metadata.series) {
+      const seriesText = metadata.series_number 
+        ? `${metadata.series} #${metadata.series_number}`
+        : metadata.series;
+      items.push({ icon: Tag, label: 'Series', value: seriesText });
+    }
+    if (metadata.genre) items.push({ icon: Tag, label: 'Genre', value: metadata.genre });
+    if (metadata.publication_date) {
+      const year = new Date(metadata.publication_date).getFullYear();
+      items.push({ icon: Calendar, label: 'Year', value: year.toString() });
+    }
+    return items;
   };
 
   return (
@@ -274,89 +307,93 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             </div>
           </CardHeader>
           
-          <CardContent className="space-y-4">
-            {uploadFiles.map((uploadFile) => (
-              <div key={uploadFile.id} className="space-y-3">
-                <div className="flex items-center gap-3">
-                  {getFileIcon(uploadFile.file)}
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium truncate pr-2">
-                        {uploadFile.file.name}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {uploadFile.status === 'uploading' && (
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                        )}
-                        {uploadFile.status === 'success' && (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        )}
-                        {uploadFile.status === 'error' && (
-                          <XCircle className="h-4 w-4 text-red-500" />
-                        )}
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {Math.round(uploadFile.file.size / 1024 / 1024 * 100) / 100} MB
+          <CardContent className="space-y-6">
+            {uploadFiles.map((uploadFile) => {
+              const metadataItems = uploadFile.metadata ? formatMetadataDisplay(uploadFile.metadata) : [];
+              
+              return (
+                <div key={uploadFile.id} className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    {getFileIcon(uploadFile.file)}
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium truncate pr-2">
+                          {uploadFile.file.name}
                         </span>
-                        {uploadFile.status !== 'uploading' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeFile(uploadFile.id)}
-                            className="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Show detected metadata */}
-                    {uploadFile.metadata && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {uploadFile.metadata.title && (
-                          <Badge variant="secondary" className="text-xs">
-                            📖 {uploadFile.metadata.title}
-                          </Badge>
-                        )}
-                        {uploadFile.metadata.author && (
-                          <Badge variant="outline" className="text-xs">
-                            ✍️ {uploadFile.metadata.author}
-                          </Badge>
-                        )}
-                        {uploadFile.metadata.genre && (
-                          <Badge variant="outline" className="text-xs">
-                            🏷️ {uploadFile.metadata.genre}
-                          </Badge>
-                        )}
-                      </div>
-                    )}
-                    
-                    {uploadFile.status === 'uploading' && (
-                      <div className="mt-2">
-                        <Progress value={uploadFile.progress} className="h-2" />
-                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                          <span>Uploading...</span>
-                          <span>{uploadFile.progress}%</span>
+                        <div className="flex items-center gap-2">
+                          {uploadFile.status === 'uploading' && (
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                          )}
+                          {uploadFile.status === 'success' && (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          )}
+                          {uploadFile.status === 'error' && (
+                            <XCircle className="h-4 w-4 text-red-500" />
+                          )}
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {Math.round(uploadFile.file.size / 1024 / 1024 * 100) / 100} MB
+                          </span>
+                          {uploadFile.status !== 'uploading' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeFile(uploadFile.id)}
+                              className="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
                         </div>
                       </div>
-                    )}
-                    
-                    {uploadFile.status === 'success' && (
-                      <p className="text-xs text-green-600 mt-1">
-                        ✓ Upload completed with metadata detection
-                      </p>
-                    )}
-                    
-                    {uploadFile.error && (
-                      <p className="text-xs text-red-500 mt-1">
-                        ✗ {uploadFile.error}
-                      </p>
-                    )}
+                      
+                      {/* Detected Metadata */}
+                      {metadataItems.length > 0 && (
+                        <div className="mt-3 p-3 bg-muted/50 rounded-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Sparkles className="h-3 w-3 text-emerald-500" />
+                            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                              Detected Metadata
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {metadataItems.map((item, index) => (
+                              <div key={index} className="flex items-center gap-2 text-xs">
+                                <item.icon className="h-3 w-3 text-muted-foreground" />
+                                <span className="text-muted-foreground">{item.label}:</span>
+                                <span className="font-medium truncate">{item.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {uploadFile.status === 'uploading' && (
+                        <div className="mt-2">
+                          <Progress value={uploadFile.progress} className="h-2" />
+                          <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                            <span>Uploading with metadata...</span>
+                            <span>{uploadFile.progress}%</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {uploadFile.status === 'success' && (
+                        <p className="text-xs text-green-600 mt-1">
+                          ✓ Upload completed {metadataItems.length > 0 ? 'with detected metadata' : ''}
+                        </p>
+                      )}
+                      
+                      {uploadFile.error && (
+                        <p className="text-xs text-red-500 mt-1">
+                          ✗ {uploadFile.error}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}
