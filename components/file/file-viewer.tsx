@@ -135,7 +135,7 @@ function PDFViewer({ fileId, fileData }: { fileId: string; fileData: FileData })
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }
 
 // Audio Player Component
