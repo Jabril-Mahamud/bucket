@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { BookOpen, Library } from "lucide-react";
 import { AuthButton } from "./auth-button";
-import { ThemeSwitcher } from "./theme-switcher";
 import { Button } from "./ui/button";
 
 export function Header() {
@@ -33,7 +32,7 @@ export function Header() {
           </nav>
         </div>
 
-        {/* Right side - Auth and Theme */}
+        {/* Right side - Auth (theme switcher now integrated into AuthButton) */}
         <div className="flex items-center gap-1">
           {/* Mobile Library Link */}
           <div className="md:hidden">
@@ -46,7 +45,6 @@ export function Header() {
           </div>
           
           <AuthButton />
-          <ThemeSwitcher />
         </div>
       </div>
     </header>

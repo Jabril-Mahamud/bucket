@@ -2,13 +2,17 @@ import Link from "next/link";
 import { Button } from "./ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "./logout-button";
-import { BookOpen, Settings, ChevronDown } from "lucide-react";
+import { ThemeMenuItems } from "./theme-menu-items";
+import { Settings, ChevronDown, Palette } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -58,17 +62,23 @@ export async function AuthButton() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link href="/library" className="cursor-pointer">
-              <BookOpen className="mr-2 h-4 w-4" />
-              My Library
-            </Link>
-          </DropdownMenuItem>
+
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Palette className="mr-2 h-4 w-4" />
+              Theme
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <ThemeMenuItems />
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+
           <DropdownMenuItem disabled className="cursor-not-allowed">
             <Settings className="mr-2 h-4 w-4" />
             Settings
             <span className="ml-auto text-xs text-muted-foreground">Soon</span>
           </DropdownMenuItem>
+          
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
             <LogoutButton />
