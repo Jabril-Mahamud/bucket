@@ -1,3 +1,4 @@
+// components/file/-file-upload.tsx
 "use client";
 
 import { useState, useCallback } from "react";
@@ -6,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Upload, 
   File, 
@@ -20,23 +22,40 @@ import {
   Sparkles,
   User,
   Tag,
-  Calendar
+  Calendar,
+  AlertTriangle,
+  ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { validateFiles, FileValidationResult } from "@/lib/file-validation";
+import { FileValidationDialog, FileValidationPreview } from "./file-validation-dialog";
 import { parseMetadataFromFilename, BookMetadata, validateMetadata } from "@/lib/metadata-utils";
 
 interface UploadFile {
   file: File;
   id: string;
   progress: number;
-  status: 'uploading' | 'success' | 'error';
+  status: 'pending' | 'validating' | 'uploading' | 'success' | 'error';
   error?: string;
   metadata?: BookMetadata;
+  validation?: FileValidationResult;
 }
 
-export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void }) {
+interface FileUploadProps {
+  onUploadComplete?: () => void;
+  maxFiles?: number;
+  className?: string;
+}
+
+export function FileUpload({ 
+  onUploadComplete, 
+  maxFiles = 50,
+  className 
+}: FileUploadProps) {
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [showValidationDialog, setShowValidationDialog] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   
   const supabase = createClient();
 
@@ -48,16 +67,16 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('Not authenticated');
 
-        // Create file path: user_id/filename
-        const filePath = `${user.id}/${uploadFile.file.name}`;
-        
-        // Update progress to show upload starting
+        // Update status to uploading
         setUploadFiles(prev => prev.map(f => 
           f.id === uploadFile.id 
-            ? { ...f, progress: 10 }
+            ? { ...f, status: 'uploading' as const, progress: 10 }
             : f
         ));
 
+        // Create file path: user_id/filename
+        const filePath = `${user.id}/${uploadFile.file.name}`;
+        
         // Upload to Supabase Storage
         const { data: storageData, error: storageError } = await supabase.storage
           .from('user-files')
@@ -79,7 +98,6 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
           const validationErrors = validateMetadata(uploadFile.metadata);
           if (validationErrors.length > 0) {
             console.warn('Metadata validation errors:', validationErrors);
-            // Still save but with warnings
           }
         }
 
@@ -132,8 +150,8 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
     onUploadComplete?.();
   }, [supabase, onUploadComplete]);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const newFiles: UploadFile[] = acceptedFiles.map(file => {
+  const processValidatedFiles = useCallback((validFiles: File[]) => {
+    const newFiles: UploadFile[] = validFiles.map(file => {
       // Extract metadata from filename
       const metadata = parseMetadataFromFilename(file.name);
       
@@ -141,14 +159,36 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
         file,
         id: Math.random().toString(36).substring(7),
         progress: 0,
-        status: 'uploading' as const,
+        status: 'pending' as const,
         metadata
       };
     });
     
     setUploadFiles(prev => [...prev, ...newFiles]);
     handleUploadFiles(newFiles);
+    setShowValidationDialog(false);
+    setPendingFiles([]);
   }, [handleUploadFiles]);
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    // Check file limit
+    if (uploadFiles.length + acceptedFiles.length > maxFiles) {
+      alert(`Cannot upload more than ${maxFiles} files at once. Please upload in smaller batches.`);
+      return;
+    }
+
+    // Validate files
+    const validation = validateFiles(acceptedFiles);
+    
+    if (validation.invalid.length > 0 || validation.warnings.length > 0) {
+      // Show validation dialog for review
+      setPendingFiles(acceptedFiles);
+      setShowValidationDialog(true);
+    } else {
+      // All files are valid, proceed directly
+      processValidatedFiles(validation.valid);
+    }
+  }, [uploadFiles.length, maxFiles, processValidatedFiles]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -158,11 +198,12 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
       'application/epub+zip': ['.epub'],
       'audio/*': ['.mp3', '.wav', '.m4a', '.aac', '.ogg']
     },
-    multiple: true
+    multiple: true,
+    maxFiles
   });
 
   const clearCompleted = () => {
-    setUploadFiles(prev => prev.filter(f => f.status === 'uploading'));
+    setUploadFiles(prev => prev.filter(f => f.status === 'pending' || f.status === 'uploading'));
   };
 
   const retryFailed = () => {
@@ -170,7 +211,7 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
     if (failedFiles.length > 0) {
       setUploadFiles(prev => prev.map(f => 
         f.status === 'error' 
-          ? { ...f, status: 'uploading' as const, progress: 0, error: undefined }
+          ? { ...f, status: 'pending' as const, progress: 0, error: undefined }
           : f
       ));
       handleUploadFiles(failedFiles);
@@ -209,8 +250,38 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
     return items;
   };
 
+  const getStatusIcon = (status: UploadFile['status']) => {
+    switch (status) {
+      case 'pending':
+        return <File className="h-4 w-4 text-muted-foreground" />;
+      case 'validating':
+        return <ShieldCheck className="h-4 w-4 text-blue-500 animate-pulse" />;
+      case 'uploading':
+        return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+      case 'success':
+        return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+      case 'error':
+        return <XCircle className="h-4 w-4 text-red-500" />;
+    }
+  };
+
+  const getStatusText = (status: UploadFile['status'], progress: number) => {
+    switch (status) {
+      case 'pending':
+        return 'Pending...';
+      case 'validating':
+        return 'Validating...';
+      case 'uploading':
+        return `Uploading... ${progress}%`;
+      case 'success':
+        return 'Complete';
+      case 'error':
+        return 'Failed';
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className={cn("space-y-6", className)}>
       {/* Drop Zone */}
       <div
         {...getRootProps()}
@@ -238,7 +309,7 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             <div className="space-y-2">
               <p className="text-lg font-medium text-primary">Drop your files here</p>
               <p className="text-sm text-muted-foreground">
-                Release to upload with automatic metadata detection
+                Files will be validated automatically
               </p>
             </div>
           ) : (
@@ -254,7 +325,7 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
               
               <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
                 <Sparkles className="h-3 w-3" />
-                <span>Automatic metadata detection included</span>
+                <span>Advanced validation & metadata detection</span>
               </div>
               
               <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
@@ -265,10 +336,19 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
                 <span className="px-2 py-1 bg-muted rounded">WAV</span>
                 <span className="px-2 py-1 bg-muted rounded">M4A</span>
               </div>
+              
+              <p className="text-xs text-muted-foreground">
+                Maximum {maxFiles} files per upload
+              </p>
             </div>
           )}
         </div>
       </div>
+
+      {/* File validation preview */}
+      {pendingFiles.length > 0 && (
+        <FileValidationPreview files={pendingFiles} />
+      )}
 
       {/* Upload Progress */}
       {uploadFiles.length > 0 && (
@@ -322,19 +402,11 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
                           {uploadFile.file.name}
                         </span>
                         <div className="flex items-center gap-2">
-                          {uploadFile.status === 'uploading' && (
-                            <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                          )}
-                          {uploadFile.status === 'success' && (
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          )}
-                          {uploadFile.status === 'error' && (
-                            <XCircle className="h-4 w-4 text-red-500" />
-                          )}
+                          {getStatusIcon(uploadFile.status)}
                           <span className="text-xs text-muted-foreground whitespace-nowrap">
                             {Math.round(uploadFile.file.size / 1024 / 1024 * 100) / 100} MB
                           </span>
-                          {uploadFile.status !== 'uploading' && (
+                          {uploadFile.status !== 'uploading' && uploadFile.status !== 'pending' && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -347,8 +419,30 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
                         </div>
                       </div>
                       
+                      {/* Status */}
+                      <p className="text-xs text-muted-foreground">
+                        {getStatusText(uploadFile.status, uploadFile.progress)}
+                      </p>
+                      
+                      {/* Progress bar for uploading files */}
+                      {uploadFile.status === 'uploading' && (
+                        <div className="mt-2">
+                          <Progress value={uploadFile.progress} className="h-2" />
+                        </div>
+                      )}
+                      
+                      {/* Error message */}
+                      {uploadFile.error && (
+                        <Alert variant="destructive" className="mt-2">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription className="text-xs">
+                            {uploadFile.error}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      
                       {/* Detected Metadata */}
-                      {metadataItems.length > 0 && (
+                      {metadataItems.length > 0 && uploadFile.status === 'success' && (
                         <div className="mt-3 p-3 bg-muted/50 rounded-lg">
                           <div className="flex items-center gap-2 mb-2">
                             <Sparkles className="h-3 w-3 text-emerald-500" />
@@ -367,28 +461,6 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
                           </div>
                         </div>
                       )}
-                      
-                      {uploadFile.status === 'uploading' && (
-                        <div className="mt-2">
-                          <Progress value={uploadFile.progress} className="h-2" />
-                          <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                            <span>Uploading with metadata...</span>
-                            <span>{uploadFile.progress}%</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {uploadFile.status === 'success' && (
-                        <p className="text-xs text-green-600 mt-1">
-                          ✓ Upload completed {metadataItems.length > 0 ? 'with detected metadata' : ''}
-                        </p>
-                      )}
-                      
-                      {uploadFile.error && (
-                        <p className="text-xs text-red-500 mt-1">
-                          ✗ {uploadFile.error}
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -396,6 +468,31 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             })}
           </CardContent>
         </Card>
+      )}
+
+      {/* Validation Dialog */}
+      <FileValidationDialog
+        files={pendingFiles}
+        onValidFilesOnly={processValidatedFiles}
+        onCancel={() => {
+          setPendingFiles([]);
+          setShowValidationDialog(false);
+        }}
+        trigger={null}
+      />
+      
+      {showValidationDialog && (
+        <div className="fixed inset-0 z-50" onClick={() => setShowValidationDialog(true)}>
+          <FileValidationDialog
+            files={pendingFiles}
+            onValidFilesOnly={processValidatedFiles}
+            onCancel={() => {
+              setPendingFiles([]);
+              setShowValidationDialog(false);
+            }}
+            trigger={<div />}
+          />
+        </div>
       )}
     </div>
   );
