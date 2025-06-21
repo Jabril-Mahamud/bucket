@@ -39,6 +39,7 @@ import {
   FileText
 } from "lucide-react";
 import { BookMetadata, validateMetadata, parseMetadataFromFilename } from "@/lib/metadata-utils";
+import Image from "next/image";
 
 interface LibraryFile {
   id: string;
@@ -306,10 +307,12 @@ export function EditMetadataDialog({ file, onSave, trigger }: EditMetadataDialog
               <div className="aspect-[3/4] border-2 border-dashed border-muted-foreground/25 rounded-lg overflow-hidden bg-muted/30 relative group">
                 {coverPreview ? (
                   <>
-                    <img 
+                    <Image 
                       src={coverPreview} 
                       alt="Cover" 
-                      className="w-full h-full object-cover"
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                     />
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <Button

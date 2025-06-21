@@ -1,8 +1,7 @@
-// components/file/-file-upload.tsx
+// components/file/file-upload.tsx
 "use client";
 
 import { useState, useCallback } from "react";
-import { useDropzone } from "react-dropzone";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +55,7 @@ export function FileUpload({
   const [isUploading, setIsUploading] = useState(false);
   const [showValidationDialog, setShowValidationDialog] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [isDragActive, setIsDragActive] = useState(false);
   
   const supabase = createClient();
 
@@ -170,19 +170,24 @@ export function FileUpload({
     setPendingFiles([]);
   }, [handleUploadFiles]);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    
     // Check file limit
-    if (uploadFiles.length + acceptedFiles.length > maxFiles) {
+    if (uploadFiles.length + files.length > maxFiles) {
       alert(`Cannot upload more than ${maxFiles} files at once. Please upload in smaller batches.`);
       return;
     }
 
     // Validate files
-    const validation = validateFiles(acceptedFiles);
+    const validation = validateFiles(files);
     
     if (validation.invalid.length > 0 || validation.warnings.length > 0) {
       // Show validation dialog for review
-      setPendingFiles(acceptedFiles);
+      setPendingFiles(files);
       setShowValidationDialog(true);
     } else {
       // All files are valid, proceed directly
@@ -190,17 +195,37 @@ export function FileUpload({
     }
   }, [uploadFiles.length, maxFiles, processValidatedFiles]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'application/pdf': ['.pdf'],
-      'text/plain': ['.txt'],
-      'application/epub+zip': ['.epub'],
-      'audio/*': ['.mp3', '.wav', '.m4a', '.aac', '.ogg']
-    },
-    multiple: true,
-    maxFiles
-  });
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragActive(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragActive(false);
+  }, []);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    // Check file limit
+    if (uploadFiles.length + files.length > maxFiles) {
+      alert(`Cannot upload more than ${maxFiles} files at once. Please upload in smaller batches.`);
+      return;
+    }
+
+    // Validate files
+    const validation = validateFiles(files);
+    
+    if (validation.invalid.length > 0 || validation.warnings.length > 0) {
+      // Show validation dialog for review
+      setPendingFiles(files);
+      setShowValidationDialog(true);
+    } else {
+      // All files are valid, proceed directly
+      processValidatedFiles(validation.valid);
+    }
+  }, [uploadFiles.length, maxFiles, processValidatedFiles]);
 
   const clearCompleted = () => {
     setUploadFiles(prev => prev.filter(f => f.status === 'pending' || f.status === 'uploading'));
@@ -284,7 +309,9 @@ export function FileUpload({
     <div className={cn("space-y-6", className)}>
       {/* Drop Zone */}
       <div
-        {...getRootProps()}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         className={cn(
           "relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200",
           "hover:border-primary hover:bg-primary/5",
@@ -293,8 +320,15 @@ export function FileUpload({
             : "border-muted-foreground/25"
         )}
       >
-        <input {...getInputProps()} />
-        <div className="flex flex-col items-center gap-4">
+        <input
+          type="file"
+          multiple
+          accept=".pdf,.epub,.txt,.mp3,.wav,.m4a,.aac,.ogg"
+          onChange={handleFileInput}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        />
+        
+        <div className="flex flex-col items-center gap-4 pointer-events-none">
           <div className={cn(
             "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200",
             isDragActive ? "bg-primary/20 scale-110" : "bg-muted"

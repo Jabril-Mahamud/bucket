@@ -1,7 +1,7 @@
 // components/file/duplicate-detection.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -56,7 +56,6 @@ interface DuplicateDetectionProps {
 
 export function DuplicateDetection({ trigger, onFilesDeleted }: DuplicateDetectionProps) {
   const [open, setOpen] = useState(false);
-  // const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
@@ -64,7 +63,7 @@ export function DuplicateDetection({ trigger, onFilesDeleted }: DuplicateDetecti
   
   const supabase = createClient();
 
-  const scanForDuplicates = async () => {
+  const scanForDuplicates = useCallback(async () => {
     setScanning(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -85,7 +84,7 @@ export function DuplicateDetection({ trigger, onFilesDeleted }: DuplicateDetecti
     } finally {
       setScanning(false);
     }
-  };
+  }, [supabase]);
 
   const findDuplicates = (files: LibraryFile[]): DuplicateGroup[] => {
     const groups: DuplicateGroup[] = [];
@@ -281,11 +280,12 @@ export function DuplicateDetection({ trigger, onFilesDeleted }: DuplicateDetecti
     }
   };
 
+  // Fixed useEffect with proper dependencies
   useEffect(() => {
     if (open && duplicateGroups.length === 0) {
       scanForDuplicates();
     }
-  }, [open]);
+  }, [open, duplicateGroups.length, scanForDuplicates]);
 
   const getDuplicateTypeInfo = (type: DuplicateGroup['duplicateType']) => {
     switch (type) {
