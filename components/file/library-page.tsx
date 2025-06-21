@@ -1,7 +1,7 @@
 // components/file/enhanced-library-page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +56,7 @@ import { FavoriteToggle } from "./FavoriteToggle";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { FileUpload } from "./file-upload";
+import Image from "next/image";
 
 interface LibraryFile {
   id: string;
@@ -97,7 +98,7 @@ type SortOption = 'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'size-as
 type FilterOption = 'all' | 'pdf' | 'text' | 'audio' | 'with-metadata' | 'without-metadata' | 'favorites' | 'recent';
 type ViewMode = 'grid' | 'list';
 
-export function EnhancedLibraryPage() {
+export function LibraryPage() {
   const [files, setFiles] = useState<LibraryFile[]>([]);
   const [filteredFiles, setFilteredFiles] = useState<LibraryFile[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
@@ -123,7 +124,7 @@ export function EnhancedLibraryPage() {
 
   const supabase = createClient();
 
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -153,7 +154,7 @@ export function EnhancedLibraryPage() {
       const formattedFiles = filesData.map(file => ({
         ...file,
         progress: file.file_progress?.[0] || null,
-        tags: file.file_tags?.map((ft: any) => ft.tags).filter(Boolean) || []
+        tags: file.file_tags?.map((ft: { tags: Tag }) => ft.tags).filter(Boolean) || []
       }));
 
       setFiles(formattedFiles);
@@ -164,9 +165,9 @@ export function EnhancedLibraryPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase]);
 
-  const fetchTags = async () => {
+  const fetchTags = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -182,7 +183,7 @@ export function EnhancedLibraryPage() {
     } catch (error) {
       console.error('Error fetching tags:', error);
     }
-  };
+  }, [supabase]);
 
   const calculateFileStats = (fileList: LibraryFile[]) => {
     const now = new Date();
@@ -202,7 +203,7 @@ export function EnhancedLibraryPage() {
   useEffect(() => {
     fetchFiles();
     fetchTags();
-  }, []);
+  }, [fetchFiles, fetchTags]);
 
   useEffect(() => {
     let filtered = [...files];
@@ -698,10 +699,11 @@ export function EnhancedLibraryPage() {
                     {/* Cover Image or Icon */}
                     <div className="relative aspect-[3/4] rounded-t-xl overflow-hidden bg-muted/30">
                       {coverUrl ? (
-                        <img 
+                        <Image 
                           src={coverUrl} 
                           alt={displayTitle}
-                          className="w-full h-full object-cover"
+                          fill
+                          className="object-cover"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
@@ -862,7 +864,7 @@ export function EnhancedLibraryPage() {
               })}
             </div>
           ) : (
-            // List View (keeping the existing list view implementation)
+            // List View
             <div className="space-y-3">
               {filteredFiles.map((file) => {
                 const coverUrl = getCoverImageUrl(file);
@@ -890,9 +892,11 @@ export function EnhancedLibraryPage() {
                           {/* Cover or Icon */}
                           <div className="flex-shrink-0 w-12 h-16 rounded overflow-hidden bg-muted/30">
                             {coverUrl ? (
-                              <img 
+                              <Image 
                                 src={coverUrl} 
                                 alt={displayTitle}
+                                width={48}
+                                height={64}
                                 className="w-full h-full object-cover"
                               />
                             ) : (

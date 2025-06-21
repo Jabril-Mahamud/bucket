@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Clock, 
-  Star, 
-  Play, 
-  CheckCircle, 
+import {
+  Clock,
+  Star,
+  Play,
+  CheckCircle,
   BookOpen,
   Filter,
   Plus,
@@ -42,32 +42,32 @@ interface Tag {
 
 const SMART_COLLECTIONS = [
   {
-    id: 'recent',
-    name: 'Recent',
+    id: "recent",
+    name: "Recent",
     icon: Clock,
-    description: 'Recently added or accessed',
-    color: 'text-blue-500'
+    description: "Recently added or accessed",
+    color: "text-blue-500",
   },
   {
-    id: 'in-progress',
-    name: 'In Progress',
+    id: "in-progress",
+    name: "In Progress",
     icon: Play,
-    description: 'Currently reading or listening',
-    color: 'text-orange-500'
+    description: "Currently reading or listening",
+    color: "text-orange-500",
   },
   {
-    id: 'completed',
-    name: 'Completed',
+    id: "completed",
+    name: "Completed",
     icon: CheckCircle,
-    description: 'Finished reading or listening',
-    color: 'text-green-500'
+    description: "Finished reading or listening",
+    color: "text-green-500",
   },
   {
-    id: 'favorites',
-    name: 'Favorites',
+    id: "favorites",
+    name: "Favorites",
     icon: Star,
-    description: 'Your starred files',
-    color: 'text-yellow-500'
+    description: "Your starred files",
+    color: "text-yellow-500",
   },
 ] as const;
 
@@ -77,62 +77,65 @@ export function SmartCollections({
   selectedTags,
   onTagsChange,
   fileStats,
-  className
+  className,
 }: SmartCollectionsProps) {
   const [tags, setTags] = useState<Tag[]>([]);
   const [showCreateTag, setShowCreateTag] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#6366f1");
   const [loading, setLoading] = useState(false);
-  
+
   const supabase = createClient();
-
-  useEffect(() => {
-    fetchTags();
-  }, []);
-
-  const fetchTags = async () => {
+  const fetchTags = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: tagsData, error } = await supabase
-        .from('tags')
-        .select(`
-          *,
-          file_tags(count)
-        `)
-        .eq('user_id', user.id)
-        .order('name');
+        .from("tags")
+        .select(
+          `
+        *,
+        file_tags(count)
+      `
+        )
+        .eq("user_id", user.id)
+        .order("name");
 
       if (error) throw error;
 
-      const tagsWithCounts = tagsData.map(tag => ({
+      const tagsWithCounts = tagsData.map((tag) => ({
         ...tag,
-        file_count: tag.file_tags?.length || 0
+        file_count: tag.file_tags?.length || 0,
       }));
 
       setTags(tagsWithCounts);
     } catch (error) {
-      console.error('Error fetching tags:', error);
+      console.error("Error fetching tags:", error);
     }
-  };
+  }, [supabase]);
+  
+  useEffect(() => {
+    fetchTags();
+  }, [fetchTags]);
 
   const createTag = async () => {
     if (!newTagName.trim()) return;
-    
+
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { error } = await supabase
-        .from('tags')
-        .insert({
-          user_id: user.id,
-          name: newTagName.trim(),
-          color: newTagColor
-        });
+      const { error } = await supabase.from("tags").insert({
+        user_id: user.id,
+        name: newTagName.trim(),
+        color: newTagColor,
+      });
 
       if (error) throw error;
 
@@ -141,7 +144,7 @@ export function SmartCollections({
       setShowCreateTag(false);
       fetchTags();
     } catch (error) {
-      console.error('Error creating tag:', error);
+      console.error("Error creating tag:", error);
     } finally {
       setLoading(false);
     }
@@ -149,24 +152,21 @@ export function SmartCollections({
 
   const deleteTag = async (tagId: string) => {
     try {
-      const { error } = await supabase
-        .from('tags')
-        .delete()
-        .eq('id', tagId);
+      const { error } = await supabase.from("tags").delete().eq("id", tagId);
 
       if (error) throw error;
       fetchTags();
-      
+
       // Remove from selected tags if it was selected
-      onTagsChange(selectedTags.filter(id => id !== tagId));
+      onTagsChange(selectedTags.filter((id) => id !== tagId));
     } catch (error) {
-      console.error('Error deleting tag:', error);
+      console.error("Error deleting tag:", error);
     }
   };
 
   const toggleTag = (tagId: string) => {
     if (selectedTags.includes(tagId)) {
-      onTagsChange(selectedTags.filter(id => id !== tagId));
+      onTagsChange(selectedTags.filter((id) => id !== tagId));
     } else {
       onTagsChange([...selectedTags, tagId]);
     }
@@ -174,17 +174,30 @@ export function SmartCollections({
 
   const getCollectionCount = (collectionId: string) => {
     switch (collectionId) {
-      case 'recent': return fileStats.recent;
-      case 'in-progress': return fileStats.inProgress;
-      case 'completed': return fileStats.completed;
-      case 'favorites': return fileStats.favorites;
-      default: return 0;
+      case "recent":
+        return fileStats.recent;
+      case "in-progress":
+        return fileStats.inProgress;
+      case "completed":
+        return fileStats.completed;
+      case "favorites":
+        return fileStats.favorites;
+      default:
+        return 0;
     }
   };
 
   const TAG_COLORS = [
-    "#6366f1", "#8b5cf6", "#ec4899", "#ef4444", "#f97316", 
-    "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#6366f1"
+    "#6366f1",
+    "#8b5cf6",
+    "#ec4899",
+    "#ef4444",
+    "#f97316",
+    "#eab308",
+    "#22c55e",
+    "#06b6d4",
+    "#3b82f6",
+    "#6366f1",
   ];
 
   return (
@@ -219,7 +232,7 @@ export function SmartCollections({
             const Icon = collection.icon;
             const count = getCollectionCount(collection.id);
             const isSelected = selectedCollection === collection.id;
-            
+
             return (
               <Button
                 key={collection.id}
@@ -270,7 +283,7 @@ export function SmartCollections({
                 value={newTagName}
                 onChange={(e) => setNewTagName(e.target.value)}
                 className="w-full px-2 py-1 text-sm border rounded bg-background"
-                onKeyDown={(e) => e.key === 'Enter' && createTag()}
+                onKeyDown={(e) => e.key === "Enter" && createTag()}
               />
               <div className="flex gap-1 flex-wrap">
                 {TAG_COLORS.map((color) => (
@@ -286,10 +299,18 @@ export function SmartCollections({
                 ))}
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={createTag} disabled={loading || !newTagName.trim()}>
+                <Button
+                  size="sm"
+                  onClick={createTag}
+                  disabled={loading || !newTagName.trim()}
+                >
                   Create
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setShowCreateTag(false)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowCreateTag(false)}
+                >
                   Cancel
                 </Button>
               </div>
@@ -305,14 +326,14 @@ export function SmartCollections({
             ) : (
               tags.map((tag) => {
                 const isSelected = selectedTags.includes(tag.id);
-                
+
                 return (
                   <div
                     key={tag.id}
                     className={cn(
                       "flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-colors group",
-                      isSelected 
-                        ? "bg-secondary border-primary/20" 
+                      isSelected
+                        ? "bg-secondary border-primary/20"
                         : "hover:bg-muted/50 border-transparent"
                     )}
                     onClick={() => toggleTag(tag.id)}
@@ -356,7 +377,10 @@ export function SmartCollections({
             {selectedCollection && (
               <div className="flex items-center gap-2">
                 <Badge variant="secondary" className="gap-1">
-                  {SMART_COLLECTIONS.find(c => c.id === selectedCollection)?.name}
+                  {
+                    SMART_COLLECTIONS.find((c) => c.id === selectedCollection)
+                      ?.name
+                  }
                   <Button
                     variant="ghost"
                     size="sm"
@@ -368,13 +392,13 @@ export function SmartCollections({
                 </Badge>
               </div>
             )}
-            
+
             {selectedTags.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {selectedTags.map((tagId) => {
-                  const tag = tags.find(t => t.id === tagId);
+                  const tag = tags.find((t) => t.id === tagId);
                   if (!tag) return null;
-                  
+
                   return (
                     <Badge key={tagId} variant="outline" className="gap-1">
                       <div
@@ -395,7 +419,7 @@ export function SmartCollections({
                 })}
               </div>
             )}
-            
+
             <Button
               variant="outline"
               size="sm"

@@ -1,12 +1,13 @@
 // lib/file-validation.ts
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ComponentType } from "react";
 
 export interface FileValidationResult {
   isValid: boolean;
   fileType: 'document' | 'audio' | 'unknown';
   mimeType: string;
   category: string;
-  icon: React.ComponentType<any>;
+  icon: ComponentType<{ className?: string }>;
   iconColor: string;
   errors: string[];
   warnings: string[];
@@ -20,7 +21,7 @@ export interface SupportedFormat {
   mimeTypes: string[];
   category: string;
   displayName: string;
-  icon: React.ComponentType<any>;
+  icon: ComponentType<{ className?: string }>;
   iconColor: string;
   maxSize: number; // in MB
   supportLevel: 'full' | 'partial' | 'experimental';
