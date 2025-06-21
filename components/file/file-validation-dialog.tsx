@@ -1,7 +1,7 @@
 // components/file/file-validation-dialog.tsx
 "use client";
 
-import { useState } from "react";
+import { JSX, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +35,6 @@ import {
   Info,
   HelpCircle,
   FileType,
-  Download,
   ExternalLink,
   Zap,
   Clock,
@@ -44,7 +43,6 @@ import { cn } from "@/lib/utils";
 import { 
   validateFiles, 
   SUPPORTED_FORMATS, 
-  UNSUPPORTED_FORMATS,
   FileValidationResult 
 } from "@/lib/file-validation";
 
@@ -66,14 +64,14 @@ export function FileValidationDialog({
   const validation = validateFiles(files);
   const { valid, invalid, totalSize, warnings } = validation;
 
-  const formatFileSize = (bytes: number) => {
+  const formatFileSize = (bytes: number): string => {
     const sizes = ['B', 'KB', 'MB', 'GB'];
     if (bytes === 0) return '0 B';
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const getFileIcon = (fileName: string) => {
+  const getFileIcon = (fileName: string): JSX.Element => {
     const ext = fileName.split('.').pop()?.toLowerCase();
     if (['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'].includes(ext || '')) {
       return <Headphones className="h-4 w-4 text-emerald-500" />;
@@ -87,7 +85,7 @@ export function FileValidationDialog({
     return <File className="h-4 w-4 text-slate-500" />;
   };
 
-  const getSupportLevelBadge = (level: FileValidationResult['supportLevel']) => {
+  const getSupportLevelBadge = (level: FileValidationResult['supportLevel']): JSX.Element => {
     switch (level) {
       case 'full':
         return <Badge className="bg-green-100 text-green-800 border-green-200">Full Support</Badge>;
@@ -97,15 +95,17 @@ export function FileValidationDialog({
         return <Badge className="bg-orange-100 text-orange-800 border-orange-200">Experimental</Badge>;
       case 'unsupported':
         return <Badge variant="destructive">Unsupported</Badge>;
+      default:
+        return <Badge variant="secondary">Unknown</Badge>;
     }
   };
 
-  const handleProceedWithValid = () => {
+  const handleProceedWithValid = (): void => {
     onValidFilesOnly(valid);
     setOpen(false);
   };
 
-  const handleCancel = () => {
+  const handleCancel = (): void => {
     onCancel();
     setOpen(false);
   };
@@ -113,7 +113,7 @@ export function FileValidationDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {trigger || (
+        {trigger ? trigger : (
           <Button variant="outline" className="gap-2">
             <FileType className="h-4 w-4" />
             Validate Files
@@ -292,7 +292,7 @@ export function FileValidationDialog({
                         </CardTitle>
                         {getSupportLevelBadge(format.supportLevel)}
                       </div>
-                    </CardContent>
+                    </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="flex flex-wrap gap-1">
                         {format.extensions.map(ext => (
@@ -406,13 +406,13 @@ export function FileValidationDialog({
                   <CardContent className="space-y-3">
                     <div className="space-y-2">
                       <p className="text-sm text-muted-foreground">
-                        If you're having trouble with file formats:
+                        If you&apos;re having trouble with file formats:
                       </p>
                       <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                        <li>Check the file isn't corrupted</li>
+                        <li>Check the file isn&apos;t corrupted</li>
                         <li>Try converting to a supported format</li>
-                        <li>Ensure the file isn't DRM-protected</li>
-                        <li>Reduce file size if it's too large</li>
+                        <li>Ensure the file isn&apos;t DRM-protected</li>
+                        <li>Reduce file size if it&apos;s too large</li>
                       </ul>
                     </div>
                   </CardContent>

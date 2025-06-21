@@ -66,6 +66,42 @@ interface CalibreBook {
   fileSize?: number;
 }
 
+// Type for CSV row data
+interface CalibreCsvRow {
+  title?: string;
+  Title?: string;
+  authors?: string;
+  Authors?: string;
+  author?: string;
+  Author?: string;
+  series?: string;
+  Series?: string;
+  series_index?: string | number;
+  'Series Index'?: string | number;
+  path?: string;
+  Path?: string;
+  formats?: string;
+  Formats?: string;
+  pubdate?: string;
+  'Publication Date'?: string;
+  published?: string;
+  tags?: string;
+  Tags?: string;
+  rating?: string | number;
+  Rating?: string | number;
+  comments?: string;
+  Comments?: string;
+  description?: string;
+  languages?: string;
+  Languages?: string;
+  language?: string;
+  isbn?: string;
+  ISBN?: string;
+  publisher?: string;
+  Publisher?: string;
+  [key: string]: string | number | undefined; // For any additional fields
+}
+
 interface ImportProgress {
   total: number;
   completed: number;
@@ -99,22 +135,22 @@ export function CalibreImport({ trigger, onImportComplete }: CalibreImportProps)
     const file = event.target.files?.[0];
     if (!file) return;
 
-    Papa.parse(file, {
+    Papa.parse<CalibreCsvRow>(file, {
       header: true,
       dynamicTyping: true,
       skipEmptyLines: true,
       complete: (results) => {
-        const calibreBooks = results.data.map((row: any, index: number) => ({
+        const calibreBooks = results.data.map((row: CalibreCsvRow, index: number) => ({
           id: index.toString(),
           title: row.title || row.Title || 'Unknown Title',
           authors: row.authors || row.Authors || row.author || row.Author || 'Unknown Author',
           series: row.series || row.Series || '',
-          series_index: parseFloat(row.series_index || row['Series Index'] || 0) || undefined,
+          series_index: parseFloat(String(row.series_index || row['Series Index'] || 0)) || undefined,
           path: row.path || row.Path || '',
           formats: row.formats || row.Formats || '',
           pubdate: row.pubdate || row['Publication Date'] || row.published || '',
           tags: row.tags || row.Tags || '',
-          rating: parseFloat(row.rating || row.Rating || 0) || undefined,
+          rating: parseFloat(String(row.rating || row.Rating || 0)) || undefined,
           comments: row.comments || row.Comments || row.description || '',
           language: row.languages || row.Languages || row.language || 'en',
           isbn: row.isbn || row.ISBN || '',

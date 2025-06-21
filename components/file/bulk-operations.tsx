@@ -22,13 +22,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   CheckSquare,
   Square,
   Trash2,
@@ -38,7 +31,7 @@ import {
   ChevronDown,
   X,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -75,12 +68,14 @@ export function BulkOperations({
   onSelectionChange,
   onOperationComplete,
   availableTags,
-  className
+  className,
 }: BulkOperationsProps) {
   const [loading, setLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
-  const [selectedTagsForBulk, setSelectedTagsForBulk] = useState<Set<string>>(new Set());
+  const [selectedTagsForBulk, setSelectedTagsForBulk] = useState<Set<string>>(
+    new Set()
+  );
   const [bulkGenre, setBulkGenre] = useState<string>("");
 
   const supabase = createClient();
@@ -94,7 +89,7 @@ export function BulkOperations({
     if (isAllSelected) {
       onSelectionChange(new Set());
     } else {
-      onSelectionChange(new Set(allFiles.map(f => f.id)));
+      onSelectionChange(new Set(allFiles.map((f) => f.id)));
     }
   };
 
@@ -106,20 +101,15 @@ export function BulkOperations({
     setLoading(true);
     try {
       const filesToDelete = Array.from(selectedFiles);
-      
+
       for (const fileId of filesToDelete) {
-        const file = allFiles.find(f => f.id === fileId);
+        const file = allFiles.find((f) => f.id === fileId);
         if (file) {
           // Delete from storage
-          await supabase.storage
-            .from('user-files')
-            .remove([file.file_path]);
+          await supabase.storage.from("user-files").remove([file.file_path]);
 
           // Delete from database (cascades to progress, tags, etc.)
-          await supabase
-            .from('files')
-            .delete()
-            .eq('id', fileId);
+          await supabase.from("files").delete().eq("id", fileId);
         }
       }
 
@@ -127,7 +117,7 @@ export function BulkOperations({
       onOperationComplete();
       setDeleteDialogOpen(false);
     } catch (error) {
-      console.error('Error deleting files:', error);
+      console.error("Error deleting files:", error);
     } finally {
       setLoading(false);
     }
@@ -137,20 +127,20 @@ export function BulkOperations({
     setLoading(true);
     try {
       const filesToUpdate = Array.from(selectedFiles);
-      
+
       const { error } = await supabase
-        .from('files')
-        .update({ 
+        .from("files")
+        .update({
           is_favorite: makeFavorite,
-          last_accessed_at: new Date().toISOString()
+          last_accessed_at: new Date().toISOString(),
         })
-        .in('id', filesToUpdate);
+        .in("id", filesToUpdate);
 
       if (error) throw error;
 
       onOperationComplete();
     } catch (error) {
-      console.error('Error updating favorites:', error);
+      console.error("Error updating favorites:", error);
     } finally {
       setLoading(false);
     }
@@ -161,7 +151,9 @@ export function BulkOperations({
 
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       const filesToTag = Array.from(selectedFiles);
@@ -174,16 +166,16 @@ export function BulkOperations({
           fileTagInserts.push({
             user_id: user.id,
             file_id: fileId,
-            tag_id: tagId
+            tag_id: tagId,
           });
         }
       }
 
       const { error } = await supabase
-        .from('file_tags')
-        .upsert(fileTagInserts, { 
-          onConflict: 'file_id,tag_id',
-          ignoreDuplicates: true 
+        .from("file_tags")
+        .upsert(fileTagInserts, {
+          onConflict: "file_id,tag_id",
+          ignoreDuplicates: true,
         });
 
       if (error) throw error;
@@ -192,7 +184,7 @@ export function BulkOperations({
       setTagDialogOpen(false);
       onOperationComplete();
     } catch (error) {
-      console.error('Error adding tags:', error);
+      console.error("Error adding tags:", error);
     } finally {
       setLoading(false);
     }
@@ -204,18 +196,18 @@ export function BulkOperations({
     setLoading(true);
     try {
       const filesToUpdate = Array.from(selectedFiles);
-      
+
       const { error } = await supabase
-        .from('files')
+        .from("files")
         .update({ genre: bulkGenre })
-        .in('id', filesToUpdate);
+        .in("id", filesToUpdate);
 
       if (error) throw error;
 
       setBulkGenre("");
       onOperationComplete();
     } catch (error) {
-      console.error('Error updating genre:', error);
+      console.error("Error updating genre:", error);
     } finally {
       setLoading(false);
     }
@@ -227,16 +219,16 @@ export function BulkOperations({
       // For now, download files one by one
       // In a production app, you might want to create a zip file server-side
       for (const fileId of Array.from(selectedFiles)) {
-        const file = allFiles.find(f => f.id === fileId);
+        const file = allFiles.find((f) => f.id === fileId);
         if (file) {
           const { data, error } = await supabase.storage
-            .from('user-files')
+            .from("user-files")
             .download(file.file_path);
 
           if (error) throw error;
 
           const url = URL.createObjectURL(data);
-          const a = document.createElement('a');
+          const a = document.createElement("a");
           a.href = url;
           a.download = file.filename;
           document.body.appendChild(a);
@@ -246,7 +238,7 @@ export function BulkOperations({
         }
       }
     } catch (error) {
-      console.error('Error downloading files:', error);
+      console.error("Error downloading files:", error);
     } finally {
       setLoading(false);
     }
@@ -254,34 +246,34 @@ export function BulkOperations({
 
   const getSelectedFileTypes = () => {
     const types = new Set<string>();
-    selectedFiles.forEach(fileId => {
-      const file = allFiles.find(f => f.id === fileId);
+    selectedFiles.forEach((fileId) => {
+      const file = allFiles.find((f) => f.id === fileId);
       if (file) {
-        if (file.file_type.startsWith('audio/')) types.add('audio');
-        else if (file.file_type === 'application/pdf') types.add('pdf');
-        else if (file.file_type === 'application/epub+zip') types.add('epub');
-        else types.add('other');
+        if (file.file_type.startsWith("audio/")) types.add("audio");
+        else if (file.file_type === "application/pdf") types.add("pdf");
+        else if (file.file_type === "application/epub+zip") types.add("epub");
+        else types.add("other");
       }
     });
     return Array.from(types);
   };
 
   const getSelectedFileInfo = () => {
-    const files = Array.from(selectedFiles).map(id => 
-      allFiles.find(f => f.id === id)
-    ).filter(Boolean) as LibraryFile[];
-    
+    const files = Array.from(selectedFiles)
+      .map((id) => allFiles.find((f) => f.id === id))
+      .filter(Boolean) as LibraryFile[];
+
     const totalSize = files.reduce((sum, file) => sum + file.file_size, 0);
-    const favoriteCount = files.filter(f => f.is_favorite).length;
-    
+    const favoriteCount = files.filter((f) => f.is_favorite).length;
+
     return { files, totalSize, favoriteCount };
   };
 
   const formatFileSize = (bytes: number) => {
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    if (bytes === 0) return '0 B';
+    const sizes = ["B", "KB", "MB", "GB"];
+    if (bytes === 0) return "0 B";
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+    return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + " " + sizes[i];
   };
 
   if (selectedCount === 0) return null;
@@ -290,7 +282,9 @@ export function BulkOperations({
   const fileTypes = getSelectedFileTypes();
 
   return (
-    <div className={cn("bg-primary/5 border-t border-primary/10 p-3", className)}>
+    <div
+      className={cn("bg-primary/5 border-t border-primary/10 p-3", className)}
+    >
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         {/* Selection Info */}
         <div className="flex items-center gap-3">
@@ -309,11 +303,11 @@ export function BulkOperations({
                 <Square className="h-4 w-4" />
               )}
             </Button>
-            
+
             <span className="text-sm font-medium">
               {selectedCount} selected
             </span>
-            
+
             <Button
               variant="ghost"
               size="sm"
@@ -336,7 +330,7 @@ export function BulkOperations({
               <>
                 <span>•</span>
                 <div className="flex gap-1">
-                  {fileTypes.map(type => (
+                  {fileTypes.map((type) => (
                     <Badge key={type} variant="outline" className="text-xs">
                       {type}
                     </Badge>
@@ -385,15 +379,15 @@ export function BulkOperations({
                 <Tag className="h-4 w-4 mr-2" />
                 Add Tags
               </DropdownMenuItem>
-              
+
               <DropdownMenuItem onClick={() => handleBulkToggleFavorite(false)}>
                 <Star className="h-4 w-4 mr-2" />
                 Remove from Favorites
               </DropdownMenuItem>
-              
+
               <DropdownMenuSeparator />
-              
-              <DropdownMenuItem 
+
+              <DropdownMenuItem
                 onClick={() => setDeleteDialogOpen(true)}
                 className="text-destructive focus:text-destructive"
               >
@@ -411,13 +405,14 @@ export function BulkOperations({
           <DialogHeader>
             <DialogTitle>Add Tags to Selected Files</DialogTitle>
             <DialogDescription>
-              Add tags to {selectedCount} selected files. Select which tags to apply.
+              Add tags to {selectedCount} selected files. Select which tags to
+              apply.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto">
-              {availableTags.map(tag => (
+              {availableTags.map((tag) => (
                 <div
                   key={tag.id}
                   className="flex items-center space-x-2 p-2 rounded border hover:bg-muted/50 cursor-pointer"
@@ -431,7 +426,7 @@ export function BulkOperations({
                     setSelectedTagsForBulk(newSelection);
                   }}
                 >
-                  <Checkbox 
+                  <Checkbox
                     checked={selectedTagsForBulk.has(tag.id)}
                     onChange={() => {}} // Handled by onClick above
                   />
@@ -442,7 +437,7 @@ export function BulkOperations({
                   <span className="text-sm">{tag.name}</span>
                 </div>
               ))}
-              
+
               {availableTags.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No tags available. Create some tags first.
@@ -451,26 +446,18 @@ export function BulkOperations({
             </div>
 
             <div className="border-t pt-4">
-              <label className="text-sm font-medium mb-2 block">Update Genre (Optional)</label>
-              <Select value={bulkGenre} onValueChange={setBulkGenre}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a genre" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Fiction">Fiction</SelectItem>
-                  <SelectItem value="Non-fiction">Non-fiction</SelectItem>
-                  <SelectItem value="Science Fiction">Science Fiction</SelectItem>
-                  <SelectItem value="Fantasy">Fantasy</SelectItem>
-                  <SelectItem value="Mystery">Mystery</SelectItem>
-                  <SelectItem value="Romance">Romance</SelectItem>
-                  <SelectItem value="Horror">Horror</SelectItem>
-                  <SelectItem value="Biography">Biography</SelectItem>
-                  <SelectItem value="History">History</SelectItem>
-                  <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="Self-help">Self-help</SelectItem>
-                  <SelectItem value="Technology">Technology</SelectItem>
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium mb-2 block">
+                Update Genre (Optional)
+              </label>
+              {bulkGenre && (
+                <Button
+                  onClick={handleBulkUpdateGenre}
+                  disabled={loading}
+                  className="w-full mt-2"
+                >
+                  Update Genre
+                </Button>
+              )}
             </div>
           </div>
 
@@ -478,9 +465,11 @@ export function BulkOperations({
             <Button variant="outline" onClick={() => setTagDialogOpen(false)}>
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleBulkAddTags}
-              disabled={loading || (selectedTagsForBulk.size === 0 && !bulkGenre)}
+              disabled={
+                loading || (selectedTagsForBulk.size === 0 && !bulkGenre)
+              }
             >
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -500,7 +489,8 @@ export function BulkOperations({
               Delete Selected Files
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete {selectedCount} selected files? This action cannot be undone.
+              Are you sure you want to delete {selectedCount} selected files?
+              This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
 
@@ -522,10 +512,13 @@ export function BulkOperations({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
               Cancel
             </Button>
-            <Button 
+            <Button
               variant="destructive"
               onClick={handleBulkDelete}
               disabled={loading}

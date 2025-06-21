@@ -56,7 +56,7 @@ interface DuplicateDetectionProps {
 
 export function DuplicateDetection({ trigger, onFilesDeleted }: DuplicateDetectionProps) {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  // const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
@@ -408,7 +408,6 @@ export function DuplicateDetection({ trigger, onFilesDeleted }: DuplicateDetecti
               <div className="space-y-6">
                 {duplicateGroups.map((group) => {
                   const typeInfo = getDuplicateTypeInfo(group.duplicateType);
-                  const selectedInGroup = group.files.filter(f => selectedFiles.has(f.id)).length;
                   
                   return (
                     <Card key={group.key} className="border-2">
