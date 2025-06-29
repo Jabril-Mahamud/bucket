@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,19 +31,7 @@ import {
 } from "lucide-react";
 import { FileUpload } from "./file-upload";
 import Link from "next/link";
-
-interface LibraryFile {
-  id: string;
-  filename: string;
-  file_path: string;
-  file_type: string;
-  file_size: number;
-  uploaded_at: string;
-  progress?: {
-    progress_percentage: number;
-    last_position: string;
-  };
-}
+import { LibraryFile, FileProgressData, DatabaseFile } from "@/lib/types";
 
 type SortOption = 'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'size-asc' | 'size-desc';
 type FilterOption = 'all' | 'pdf' | 'text' | 'audio';
@@ -61,7 +49,7 @@ export function LibraryPage() {
   
   const supabase = createClient();
 
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -80,9 +68,17 @@ export function LibraryPage() {
 
       if (error) throw error;
 
-      const formattedFiles = filesData.map(file => ({
+      // Type the file data to match our query structure
+      const typedFilesData = filesData as (DatabaseFile & {
+        file_progress: FileProgressData[] | null;
+      })[];
+
+      const formattedFiles: LibraryFile[] = typedFilesData.map(file => ({
         ...file,
-        progress: file.file_progress?.[0] || null
+        progress: file.file_progress?.[0] ? {
+          progress_percentage: file.file_progress[0].progress_percentage || 0,
+          last_position: file.file_progress[0].last_position || '0'
+        } : null
       }));
 
       setFiles(formattedFiles);
@@ -92,11 +88,11 @@ export function LibraryPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase]);
 
   useEffect(() => {
     fetchFiles();
-  }, []);
+  }, [fetchFiles]);
 
   useEffect(() => {
     let filtered = [...files];
@@ -132,13 +128,13 @@ export function LibraryPage() {
         case 'name-desc':
           return b.filename.localeCompare(a.filename);
         case 'date-asc':
-          return new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime();
+          return new Date(a.uploaded_at || '').getTime() - new Date(b.uploaded_at || '').getTime();
         case 'date-desc':
-          return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
+          return new Date(b.uploaded_at || '').getTime() - new Date(a.uploaded_at || '').getTime();
         case 'size-asc':
-          return a.file_size - b.file_size;
+          return (a.file_size || 0) - (b.file_size || 0);
         case 'size-desc':
-          return b.file_size - a.file_size;
+          return (b.file_size || 0) - (a.file_size || 0);
         default:
           return 0;
       }
@@ -172,14 +168,16 @@ export function LibraryPage() {
     return 'outline';
   };
 
-  const formatFileSize = (bytes: number) => {
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return '0 B';
     const sizes = ['B', 'KB', 'MB', 'GB'];
     if (bytes === 0) return '0 B';
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'Unknown date';
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',

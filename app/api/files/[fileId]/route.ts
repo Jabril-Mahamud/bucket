@@ -36,16 +36,12 @@ export async function GET(
       return NextResponse.json({ error: 'File not accessible' }, { status: 404 });
     }
 
-    // Update file access/progress (optional - tracks when file was accessed)
+    // Update last accessed time (optional tracking)
     await supabase
-      .from('file_progress')
-      .upsert({
-        user_id: user.id,
-        file_id: fileId,
-        progress_percentage: 0, // We'll update this from the client if needed
-        last_position: '0',
-        updated_at: new Date().toISOString()
-      });
+      .from('files')
+      .update({ last_accessed_at: new Date().toISOString() })
+      .eq('id', fileId)
+      .eq('user_id', user.id);
 
     // Convert blob to array buffer
     const arrayBuffer = await fileData.arrayBuffer();
@@ -54,7 +50,7 @@ export async function GET(
     return new NextResponse(arrayBuffer, {
       headers: {
         'Content-Type': file.file_type,
-        'Content-Length': file.file_size.toString(),
+        'Content-Length': (file.file_size || 0).toString(),
         'Content-Disposition': `inline; filename="${file.filename}"`,
         'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
       },
@@ -62,45 +58,6 @@ export async function GET(
 
   } catch (error) {
     console.error('Error serving file:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
-
-// Optional: Add POST method for updating progress
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ fileId: string }> }
-) {
-  try {
-    const { fileId } = await params;
-    const { progress_percentage, last_position } = await request.json();
-    const supabase = await createClient();
-
-    // Get user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Update progress
-    const { error } = await supabase
-      .from('file_progress')
-      .upsert({
-        user_id: user.id,
-        file_id: fileId,
-        progress_percentage: progress_percentage || 0,
-        last_position: last_position || '0',
-        updated_at: new Date().toISOString()
-      });
-
-    if (error) {
-      return NextResponse.json({ error: 'Failed to update progress' }, { status: 500 });
-    }
-
-    return NextResponse.json({ success: true });
-
-  } catch (error) {
-    console.error('Error updating progress:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
