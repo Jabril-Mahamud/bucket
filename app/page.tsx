@@ -1,4 +1,3 @@
-import { hasEnvVars } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -91,7 +90,7 @@ export default function Home() {
                 </p>
               </div>
 
-              {hasEnvVars && (
+              
                 <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
                   <Button asChild size="lg" className="gap-2 h-11 px-6">
                     <Link href="/auth/sign-up">
@@ -105,7 +104,7 @@ export default function Home() {
                     </Link>
                   </Button>
                 </div>
-              )}
+              
             </div>
           </section>
 
@@ -188,7 +187,7 @@ export default function Home() {
           </section>
 
           {/* CTA Section */}
-          {hasEnvVars && (
+          
             <section className="py-20 text-center">
               <div className="space-y-6">
                 <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
@@ -213,7 +212,7 @@ export default function Home() {
                 </div>
               </div>
             </section>
-          )}
+          
         </div>
       </div>
 
