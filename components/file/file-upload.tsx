@@ -18,16 +18,8 @@ import {
   X,
   RotateCcw
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, UploadFile } from "@/lib/utils";
 import { TablesInsert } from "@/lib/supabase/database.types";
-
-interface UploadFile {
-  file: File;
-  id: string;
-  progress: number;
-  status: 'uploading' | 'success' | 'error';
-  error?: string;
-}
 
 export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void }) {
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);

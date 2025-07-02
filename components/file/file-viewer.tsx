@@ -40,13 +40,8 @@ function PDFViewer({
   fileId: string;
   fileData: FileWithProgressData;
 }) {
-  const [hasViewed, setHasViewed] = useState(false);
-  const { updateProgress, isUpdating } = useFileProgress();
-
   const openInNewTab = () => {
     window.open(`/api/files/${fileId}`, "_blank");
-    setHasViewed(true);
-    updateProgress(fileId, 10, "1");
   };
 
   return (
@@ -100,14 +95,7 @@ function PDFViewer({
               Open PDF in New Tab
             </Button>
 
-            {(hasViewed || isUpdating) && (
-              <div className="flex items-center justify-center gap-2 text-sm text-green-600 dark:text-green-400">
-                <BarChart3 className="h-4 w-4" />
-                {isUpdating
-                  ? "Updating progress..."
-                  : "Progress updated successfully"}
-              </div>
-            )}
+            
           </div>
 
           <div className="text-center text-sm text-muted-foreground">

@@ -484,7 +484,7 @@ export function LibraryPage() {
                         <span>{formatFileSize(file.file_size)}</span>
                         <span className="hidden sm:inline">•</span>
                         <span>{formatDate(file.uploaded_at)}</span>
-                        {file.progress && file.progress.progress_percentage > 0 && (
+                        {file.file_type.startsWith('audio/') && file.progress && file.progress.progress_percentage > 0 && (
                           <>
                             <span className="hidden sm:inline">•</span>
                             <span className="text-primary font-medium">
