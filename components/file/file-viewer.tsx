@@ -31,6 +31,7 @@ import {
   FileProgressData,
 } from "@/lib/types";
 import { useFileProgress } from "@/hooks/useFileProgress";
+import { EPUBViewer } from "@/components/file/epub/epub-viewer";
 
 // PDF Viewer Component
 function PDFViewer({
@@ -625,15 +626,13 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
       {isPDF && <PDFViewer fileId={fileId} fileData={fileData} />}
 
-      {!isAudio && !isPDF && (
+      {isEPUB && <EPUBViewer fileId={fileId} fileData={fileData} />}
+
+      {!isAudio && !isPDF && !isEPUB && (
         <Card className="border-2">
           <CardContent className="pt-12 pb-12 text-center space-y-6">
             <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto">
-              {isEPUB ? (
-                <BookOpen className="h-10 w-10 text-muted-foreground" />
-              ) : (
-                <FileText className="h-10 w-10 text-muted-foreground" />
-              )}
+              <FileText className="h-10 w-10 text-muted-foreground" />
             </div>
             <div className="space-y-2">
               <h3 className="text-xl font-semibold">Preview not available</h3>
