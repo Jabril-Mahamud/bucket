@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { 
-  ArrowLeft, 
-  Download, 
-  Volume2, 
-  Pause, 
+import {
+  ArrowLeft,
+  Download,
+  Volume2,
+  Pause,
   Play,
   SkipBack,
   SkipForward,
@@ -21,47 +21,27 @@ import {
   Clock,
   BarChart3,
   VolumeX,
-  Volume1
+  Volume1,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-
-interface FileData {
-  id: string;
-  filename: string;
-  file_path: string;
-  file_type: string;
-  file_size: number;
-  uploaded_at: string;
-  progress?: {
-    progress_percentage: number;
-    last_position: string;
-  };
-}
+import {
+  FileWithProgressData,
+  DatabaseFile,
+  FileProgressData,
+} from "@/lib/types";
+import { useFileProgress } from "@/hooks/useFileProgress";
 
 // PDF Viewer Component
-function PDFViewer({ fileId, fileData }: { fileId: string; fileData: FileData }) {
-  const [hasViewed, setHasViewed] = useState(false);
-
+function PDFViewer({
+  fileId,
+  fileData,
+}: {
+  fileId: string;
+  fileData: FileWithProgressData;
+}) {
   const openInNewTab = () => {
-    window.open(`/api/files/${fileId}`, '_blank');
-    setHasViewed(true);
-    updateProgress(10, '1');
-  };
-
-  const updateProgress = async (percentage: number, position: string) => {
-    try {
-      await fetch(`/api/files/${fileId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          progress_percentage: percentage, 
-          last_position: position 
-        })
-      });
-    } catch (error) {
-      console.error('Error updating progress:', error);
-    }
+    window.open(`/api/files/${fileId}`, "_blank");
   };
 
   return (
@@ -79,7 +59,10 @@ function PDFViewer({ fileId, fileData }: { fileId: string; fileData: FileData })
                 <Badge variant="destructive">PDF</Badge>
               </div>
               <p className="text-sm text-muted-foreground font-normal">
-                {Math.round(fileData.file_size / 1024 / 1024 * 100) / 100} MB
+                {fileData.file_size
+                  ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
+                  : 0}{" "}
+                MB
               </p>
             </div>
           </CardTitle>
@@ -94,23 +77,25 @@ function PDFViewer({ fileId, fileData }: { fileId: string; fileData: FileData })
                   {Math.round(fileData.progress.progress_percentage)}% complete
                 </span>
               </div>
-              <Progress value={fileData.progress.progress_percentage} className="h-3" />
+              <Progress
+                value={fileData.progress.progress_percentage}
+                className="h-3"
+              />
             </div>
           )}
 
           {/* Action Buttons */}
           <div className="space-y-3">
-            <Button size="lg" onClick={openInNewTab} className="w-full gap-3 h-12">
+            <Button
+              size="lg"
+              onClick={openInNewTab}
+              className="w-full gap-3 h-12"
+            >
               <ExternalLink className="h-5 w-5" />
               Open PDF in New Tab
             </Button>
+
             
-            {hasViewed && (
-              <div className="flex items-center justify-center gap-2 text-sm text-green-600 dark:text-green-400">
-                <BarChart3 className="h-4 w-4" />
-                Progress updated successfully
-              </div>
-            )}
           </div>
 
           <div className="text-center text-sm text-muted-foreground">
@@ -135,11 +120,17 @@ function PDFViewer({ fileId, fileData }: { fileId: string; fileData: FileData })
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 // Audio Player Component
-function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData }) {
+function AudioPlayer({
+  fileId,
+  fileData,
+}: {
+  fileId: string;
+  fileData: FileWithProgressData;
+}) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -148,24 +139,35 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
   const [isMuted, setIsMuted] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const saveProgress = useCallback(async (currentTime: number) => {
-    try {
-      if (!duration) return;
+  const { updateProgress, updateProgressImmediate, isUpdating } =
+    useFileProgress();
 
-      const progressPercentage = (currentTime / duration) * 100;
+  const saveProgress = useCallback(
+    async (currentTime: number, immediate = false) => {
+      try {
+        if (!duration || duration === 0) return;
 
-      await fetch(`/api/files/${fileId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          progress_percentage: progressPercentage,
-          last_position: currentTime.toString()
-        })
-      });
-    } catch (error) {
-      console.error('Error saving progress:', error);
-    }
-  }, [fileId, duration]);
+        const progressPercentage = (currentTime / duration) * 100;
+
+        if (immediate) {
+          await updateProgressImmediate(
+            fileId,
+            progressPercentage,
+            currentTime.toString()
+          );
+        } else {
+          await updateProgress(
+            fileId,
+            progressPercentage,
+            currentTime.toString()
+          );
+        }
+      } catch (error) {
+        console.error("Error saving progress:", error);
+      }
+    },
+    [fileId, duration, updateProgress, updateProgressImmediate]
+  );
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -174,7 +176,7 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
     const handleLoadedMetadata = () => {
       setDuration(audio.duration);
       setLoading(false);
-      
+
       if (fileData.progress?.last_position) {
         const lastTime = parseFloat(fileData.progress.last_position);
         if (lastTime > 0 && lastTime < audio.duration) {
@@ -186,25 +188,27 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
 
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
-      
+
+      // Save progress every 10 seconds (debounced)
       if (Math.floor(audio.currentTime) % 10 === 0) {
-        saveProgress(audio.currentTime);
+        saveProgress(audio.currentTime, false);
       }
     };
 
     const handleEnded = () => {
       setIsPlaying(false);
-      saveProgress(audio.duration);
+      // Save completion immediately
+      saveProgress(audio.duration, true);
     };
 
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
 
     return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", handleEnded);
     };
   }, [fileData.progress, saveProgress]);
 
@@ -226,7 +230,8 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
 
     audio.currentTime = time;
     setCurrentTime(time);
-    saveProgress(time);
+    // Save progress immediately when user seeks
+    saveProgress(time, true);
   };
 
   const skip = (seconds: number) => {
@@ -263,11 +268,13 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
     const hours = Math.floor(time / 3600);
     const minutes = Math.floor((time % 3600) / 60);
     const seconds = Math.floor(time % 60);
-    
+
     if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+        .toString()
+        .padStart(2, "0")}`;
     }
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   const getVolumeIcon = () => {
@@ -286,7 +293,9 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
           <div className="space-y-2">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
             <p className="text-lg font-medium">Loading audio...</p>
-            <p className="text-sm text-muted-foreground">Preparing your audio file</p>
+            <p className="text-sm text-muted-foreground">
+              Preparing your audio file
+            </p>
           </div>
         </div>
       </div>
@@ -296,7 +305,7 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
   return (
     <div className="space-y-6">
       <audio ref={audioRef} src={`/api/files/${fileId}`} preload="metadata" />
-      
+
       {/* Main Audio Player */}
       <Card className="border-2">
         <CardHeader>
@@ -307,15 +316,21 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
             <div>
               <div className="flex items-center gap-2">
                 Audio Player
-                <Badge variant="default" className="bg-emerald-600">Audio</Badge>
+                <Badge variant="default" className="bg-emerald-600">
+                  Audio
+                </Badge>
               </div>
               <p className="text-sm text-muted-foreground font-normal">
-                {formatTime(duration)} • {Math.round(fileData.file_size / 1024 / 1024 * 100) / 100} MB
+                {formatTime(duration)} •{" "}
+                {fileData.file_size
+                  ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
+                  : 0}{" "}
+                MB
               </p>
             </div>
           </CardTitle>
         </CardHeader>
-        
+
         <CardContent className="space-y-6">
           {/* Progress Section */}
           <div className="space-y-4">
@@ -324,11 +339,13 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
                 <Clock className="h-4 w-4" />
                 {formatTime(currentTime)}
               </span>
-              <span className="text-muted-foreground">{formatTime(duration)}</span>
+              <span className="text-muted-foreground">
+                {formatTime(duration)}
+              </span>
             </div>
-            
+
             {/* Seek Bar */}
-            <div 
+            <div
               className="w-full bg-secondary rounded-full h-3 cursor-pointer hover:h-4 transition-all group"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -337,7 +354,7 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
                 seek(percentage * duration);
               }}
             >
-              <div 
+              <div
                 className="bg-primary h-full rounded-full transition-all duration-300 relative group-hover:bg-primary/90"
                 style={{ width: `${(currentTime / duration) * 100}%` }}
               >
@@ -348,7 +365,9 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
             {/* Overall Progress */}
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Overall Progress</span>
-              <span className="font-medium">{Math.round((currentTime / duration) * 100)}%</span>
+              <span className="font-medium">
+                {Math.round((currentTime / duration) * 100)}%
+              </span>
             </div>
           </div>
 
@@ -363,9 +382,9 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
               <SkipBack className="h-5 w-5" />
               10s
             </Button>
-            
-            <Button 
-              size="lg" 
+
+            <Button
+              size="lg"
               onClick={togglePlayPause}
               className="h-14 w-14 rounded-full p-0"
             >
@@ -375,7 +394,7 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
                 <Play className="h-7 w-7 ml-1" />
               )}
             </Button>
-            
+
             <Button
               variant="outline"
               size="lg"
@@ -397,7 +416,7 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
             >
               {getVolumeIcon()}
             </Button>
-            <div 
+            <div
               className="flex-1 bg-secondary rounded-full h-2 cursor-pointer"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -406,7 +425,7 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
                 handleVolumeChange(percentage);
               }}
             >
-              <div 
+              <div
                 className="bg-primary h-full rounded-full transition-all"
                 style={{ width: `${isMuted ? 0 : volume * 100}%` }}
               />
@@ -423,6 +442,7 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
                 <span className="flex items-center gap-2 text-muted-foreground">
                   <BarChart3 className="h-4 w-4" />
                   Last saved progress
+                  {isUpdating && <span className="text-xs">(updating...)</span>}
                 </span>
                 <span className="font-medium">
                   {Math.round(fileData.progress.progress_percentage)}%
@@ -437,7 +457,7 @@ function AudioPlayer({ fileId, fileData }: { fileId: string; fileData: FileData 
 }
 
 export function FileViewer({ fileId }: { fileId: string }) {
-  const [fileData, setFileData] = useState<FileData | null>(null);
+  const [fileData, setFileData] = useState<FileWithProgressData | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createClient();
@@ -445,36 +465,52 @@ export function FileViewer({ fileId }: { fileId: string }) {
   useEffect(() => {
     const fetchFile = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (!user) {
-          router.push('/auth/login');
+          router.push("/auth/login");
           return;
         }
 
         const { data: file, error: fileError } = await supabase
-          .from('files')
-          .select(`
+          .from("files")
+          .select(
+            `
             *,
             file_progress (
               progress_percentage,
               last_position
             )
-          `)
-          .eq('id', fileId)
-          .eq('user_id', user.id)
+          `
+          )
+          .eq("id", fileId)
+          .eq("user_id", user.id)
           .single();
 
         if (fileError) throw fileError;
 
-        const formattedFile = {
-          ...file,
-          progress: file.file_progress?.[0] || null
+        // Type the file data to match our query structure
+        const fileWithProgress = file as DatabaseFile & {
+          file_progress: FileProgressData[] | null;
+        };
+
+        const formattedFile: FileWithProgressData = {
+          ...fileWithProgress,
+          progress: fileWithProgress.file_progress?.[0]
+            ? {
+                progress_percentage:
+                  fileWithProgress.file_progress[0].progress_percentage || 0,
+                last_position:
+                  fileWithProgress.file_progress[0].last_position || "0",
+              }
+            : null,
         };
 
         setFileData(formattedFile);
       } catch (error) {
-        console.error('Error fetching file:', error);
-        router.push('/library');
+        console.error("Error fetching file:", error);
+        router.push("/library");
       } finally {
         setLoading(false);
       }
@@ -488,11 +524,11 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
     try {
       const response = await fetch(`/api/files/${fileId}`);
-      if (!response.ok) throw new Error('Download failed');
+      if (!response.ok) throw new Error("Download failed");
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = fileData.filename;
       document.body.appendChild(a);
@@ -500,17 +536,18 @@ export function FileViewer({ fileId }: { fileId: string }) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error downloading file:', error);
-      alert('Failed to download file');
+      console.error("Error downloading file:", error);
+      alert("Failed to download file");
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "Unknown date";
+    return new Date(dateString).toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   };
 
@@ -532,7 +569,9 @@ export function FileViewer({ fileId }: { fileId: string }) {
           <FileText className="h-8 w-8 text-destructive" />
         </div>
         <h2 className="text-xl font-semibold mb-2">File not found</h2>
-        <p className="text-muted-foreground mb-6">The requested file could not be located</p>
+        <p className="text-muted-foreground mb-6">
+          The requested file could not be located
+        </p>
         <Link href="/library">
           <Button className="gap-2">
             <ArrowLeft className="h-4 w-4" />
@@ -543,9 +582,9 @@ export function FileViewer({ fileId }: { fileId: string }) {
     );
   }
 
-  const isAudio = fileData.file_type.startsWith('audio/');
-  const isPDF = fileData.file_type === 'application/pdf';
-  const isEPUB = fileData.file_type === 'application/epub+zip';
+  const isAudio = fileData.file_type.startsWith("audio/");
+  const isPDF = fileData.file_type === "application/pdf";
+  const isEPUB = fileData.file_type === "application/epub+zip";
 
   return (
     <div className="space-y-8">
@@ -563,7 +602,7 @@ export function FileViewer({ fileId }: { fileId: string }) {
             Download
           </Button>
         </div>
-        
+
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight line-clamp-2">
             {fileData.filename}
@@ -571,19 +610,20 @@ export function FileViewer({ fileId }: { fileId: string }) {
           <div className="flex items-center gap-4 text-muted-foreground">
             <span>Uploaded {formatDate(fileData.uploaded_at)}</span>
             <span>•</span>
-            <span>{Math.round(fileData.file_size / 1024 / 1024 * 100) / 100} MB</span>
+            <span>
+              {fileData.file_size
+                ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
+                : 0}{" "}
+              MB
+            </span>
           </div>
         </div>
       </div>
 
       {/* File Viewer */}
-      {isAudio && (
-        <AudioPlayer fileId={fileId} fileData={fileData} />
-      )}
-      
-      {isPDF && (
-        <PDFViewer fileId={fileId} fileData={fileData} />
-      )}
+      {isAudio && <AudioPlayer fileId={fileId} fileData={fileData} />}
+
+      {isPDF && <PDFViewer fileId={fileId} fileData={fileData} />}
 
       {!isAudio && !isPDF && (
         <Card className="border-2">
@@ -598,7 +638,8 @@ export function FileViewer({ fileId }: { fileId: string }) {
             <div className="space-y-2">
               <h3 className="text-xl font-semibold">Preview not available</h3>
               <p className="text-muted-foreground max-w-md mx-auto">
-                This file type is not supported for preview. Download the file to view it on your device.
+                This file type is not supported for preview. Download the file
+                to view it on your device.
               </p>
             </div>
             <Button onClick={downloadFile} size="lg" className="gap-2">
@@ -609,5 +650,5 @@ export function FileViewer({ fileId }: { fileId: string }) {
         </Card>
       )}
     </div>
-  );
+  )
 }

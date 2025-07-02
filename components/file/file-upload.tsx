@@ -18,15 +18,8 @@ import {
   X,
   RotateCcw
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-interface UploadFile {
-  file: File;
-  id: string;
-  progress: number;
-  status: 'uploading' | 'success' | 'error';
-  error?: string;
-}
+import { cn, UploadFile } from "@/lib/utils";
+import { TablesInsert } from "@/lib/supabase/database.types";
 
 export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void }) {
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
@@ -61,16 +54,18 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             : f
         ));
 
-        // Save metadata to database
+        // Save metadata to database using typed insert
+        const fileInsert: TablesInsert<"files"> = {
+          user_id: user.id,
+          filename: uploadFile.file.name,
+          file_path: storageData.path,
+          file_type: uploadFile.file.type,
+          file_size: uploadFile.file.size
+        };
+
         const { error: dbError } = await supabase
           .from('files')
-          .insert({
-            user_id: user.id,
-            filename: uploadFile.file.name,
-            file_path: storageData.path,
-            file_type: uploadFile.file.type,
-            file_size: uploadFile.file.size
-          });
+          .insert(fileInsert);
 
         if (dbError) throw dbError;
 
