@@ -43,11 +43,16 @@ export class CloudConvertService {
             input_format: inputFormat,
             output_format: 'txt',
             options: {
-              // Optimize text extraction
+              // Optimize text extraction based on file type
               ...(inputFormat === 'pdf' && {
                 text_extraction: 'ocr_and_text',
                 ocr_engine: 'tesseract',
                 ocr_language: 'eng'
+              }),
+              ...(inputFormat === 'epub' && {
+                // EPUB-specific options
+                extract_images: false,
+                strip_formatting: false // Keep some basic formatting
               })
             }
           },
@@ -116,6 +121,7 @@ export class CloudConvertService {
   private getInputFormat(mimeType: string): string | null {
     const formatMap: Record<string, string> = {
       'application/pdf': 'pdf',
+      'application/epub+zip': 'epub', // Added EPUB support
       'text/plain': 'txt',
       'application/msword': 'doc',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
@@ -133,6 +139,7 @@ export class CloudConvertService {
   static isSupportedFileType(mimeType: string): boolean {
     const supportedTypes = [
       'application/pdf',
+      'application/epub+zip', // Added EPUB support
       'text/plain',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

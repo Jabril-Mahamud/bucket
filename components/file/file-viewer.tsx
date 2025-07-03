@@ -5,6 +5,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Badge } from "@/components/ui/badge";
 import {
   ArrowLeft,
@@ -21,6 +28,9 @@ import {
   BarChart3,
   VolumeX,
   Volume1,
+  Bookmark as BookmarkIcon,
+  Copy,
+  Search,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -30,8 +40,11 @@ import {
   FileProgressData,
 } from "@/lib/types";
 import { useFileProgress } from "@/hooks/useFileProgress";
+import { useBookmarks, Bookmark } from "@/hooks/useBookmarks";
+import { BookmarkDialog } from "@/components/bookmark/bookmark-dialog";
+import { BookmarkList } from "@/components/bookmark/bookmark-list";
 
-// Text Viewer Component
+// Text Viewer Component with Bookmark Support
 function TextViewer({
   fileId,
   fileData,
@@ -42,6 +55,13 @@ function TextViewer({
   const [textContent, setTextContent] = useState<string | null>(null);
   const [loadingText, setLoadingText] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedText, setSelectedText] = useState<string>("");
+  const [selectionPosition, setSelectionPosition] = useState<number | null>(null);
+  
+  const [bookmarkDialogOpen, setBookmarkDialogOpen] = useState(false);
+  const textContainerRef = useRef<HTMLDivElement>(null);
+
+  const { createTextBookmark } = useBookmarks(fileId);
 
   useEffect(() => {
     const fetchTextContent = async () => {
@@ -63,6 +83,85 @@ function TextViewer({
 
     fetchTextContent();
   }, [fileId]);
+
+  const handleTextSelection = () => {
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim()) {
+      const selectedStr = selection.toString().trim();
+      setSelectedText(selectedStr);
+      
+      // Calculate character position
+      const range = selection.getRangeAt(0);
+      const textContainer = textContainerRef.current;
+      if (textContainer) {
+        const beforeRange = document.createRange();
+        beforeRange.setStart(textContainer, 0);
+        beforeRange.setEnd(range.startContainer, range.startOffset);
+        const position = beforeRange.toString().length;
+        setSelectionPosition(position);
+      }
+    } else {
+      setSelectedText("");
+      setSelectionPosition(null);
+    }
+  };
+
+  const handleAddBookmark = async (title: string, note?: string) => {
+    if (selectionPosition === null) return;
+
+    // Find paragraph index
+    const paragraphs = textContent?.split('\n\n') || [];
+    let paragraphIndex = 0;
+    let charCount = 0;
+    
+    for (let i = 0; i < paragraphs.length; i++) {
+      const paragraphLength = paragraphs[i].length + 2; // +2 for \n\n
+      if (charCount + paragraphLength > selectionPosition) {
+        paragraphIndex = i;
+        break;
+      }
+      charCount += paragraphLength;
+    }
+
+    await createTextBookmark(
+      fileId,
+      title,
+      selectionPosition,
+      paragraphIndex,
+      selectedText,
+      note
+    );
+  };
+
+  const handleNavigateToBookmark = useCallback((bookmark: Bookmark) => {
+    if (bookmark.position_data.type !== 'text') return;
+
+    const { paragraph } = bookmark.position_data;
+    const textContainer = textContainerRef.current;
+    
+    if (textContainer && paragraph !== undefined) {
+      // Find the paragraph element and scroll to it
+      const paragraphElements = textContainer.querySelectorAll('p');
+      if (paragraphElements[paragraph]) {
+        paragraphElements[paragraph].scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+        
+        // Highlight the paragraph briefly
+        paragraphElements[paragraph].classList.add('bg-yellow-200', 'dark:bg-yellow-900/30');
+        setTimeout(() => {
+          paragraphElements[paragraph].classList.remove('bg-yellow-200', 'dark:bg-yellow-900/30');
+        }, 2000);
+      }
+    }
+  }, []);
+
+  const handleCopyText = () => {
+    if (selectedText) {
+      navigator.clipboard.writeText(selectedText);
+    }
+  };
 
   if (loadingText) {
     return (
@@ -90,44 +189,121 @@ function TextViewer({
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="border-2">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-              <BookOpen className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                Text Document
-                <Badge variant="default" className="bg-blue-600">
-                  Text
-                </Badge>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Main Text Content */}
+      <div className="lg:col-span-2 space-y-6">
+        <Card className="border-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                <BookOpen className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
-              <p className="text-sm text-muted-foreground font-normal">
-                {fileData.file_size
-                  ? Math.round((fileData.file_size / 1024) * 100) / 100
-                  : 0}{" "}
-                KB
-              </p>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="prose dark:prose-invert max-w-none h-[600px] overflow-y-auto p-4 border rounded-lg bg-background">
-            {textContent ? (
-              <p className="whitespace-pre-wrap">{textContent}</p>
-            ) : (
-              <p className="text-muted-foreground">No text content available.</p>
+              <div>
+                <div className="flex items-center gap-2">
+                  Text Document
+                  <Badge variant="default" className="bg-blue-600">
+                    Text
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground font-normal">
+                  {fileData.file_size
+                    ? Math.round((fileData.file_size / 1024) * 100) / 100
+                    : 0}{" "}
+                  KB
+                </p>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <div 
+                  ref={textContainerRef}
+                  className="prose dark:prose-invert max-w-none min-h-[600px] max-h-[80vh] overflow-y-auto p-6 border rounded-lg bg-muted/30 cursor-text"
+                  onMouseUp={handleTextSelection}
+                >
+                  {textContent ? (
+                    <div className="text-foreground leading-relaxed text-base">
+                      {textContent.split('\n\n').map((paragraph, index) => (
+                        <p key={index} className="mb-4 last:mb-0 transition-colors duration-200">
+                          {paragraph.trim()}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">No text content available.</p>
+                  )}
+                </div>
+              </ContextMenuTrigger>
+              
+              <ContextMenuContent className="w-56">
+                {selectedText && (
+                  <>
+                    <ContextMenuItem 
+                      onClick={() => setBookmarkDialogOpen(true)}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <BookmarkIcon className="h-4 w-4" />
+                      Add Bookmark
+                    </ContextMenuItem>
+                    <ContextMenuItem 
+                      onClick={handleCopyText}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy Text
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                  </>
+                )}
+                <ContextMenuItem className="gap-2 cursor-pointer">
+                  <Search className="h-4 w-4" />
+                  Search in Document
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+
+            {selectedText && (
+              <div className="flex items-center gap-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                                  <span className="text-sm font-medium">Selected:</span>
+                <span className="text-sm text-muted-foreground italic">
+                  &quot;{selectedText.length > 50 ? selectedText.substring(0, 50) + '...' : selectedText}&quot;
+                </span>
+                <Button
+                  size="sm"
+                  onClick={() => setBookmarkDialogOpen(true)}
+                  className="ml-auto gap-1"
+                >
+                  <BookmarkIcon className="h-3 w-3" />
+                  Bookmark
+                </Button>
+              </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bookmarks Sidebar */}
+      <div className="space-y-6">
+        <BookmarkList 
+          fileId={fileId} 
+          onNavigateToBookmark={handleNavigateToBookmark}
+        />
+      </div>
+
+      {/* Bookmark Dialog */}
+      <BookmarkDialog
+        open={bookmarkDialogOpen}
+        onOpenChange={setBookmarkDialogOpen}
+        onSave={handleAddBookmark}
+        selectedText={selectedText}
+        position={selectionPosition !== null ? `Character ${selectionPosition}` : undefined}
+      />
     </div>
   );
 }
 
-// Audio Player Component
+// Audio Player Component (unchanged, but could add audio bookmark support)
 function AudioPlayer({
   fileId,
   fileData,
@@ -143,8 +319,9 @@ function AudioPlayer({
   const [isMuted, setIsMuted] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const { updateProgress, updateProgressImmediate, isUpdating } =
-    useFileProgress();
+  const { updateProgress, updateProgressImmediate, isUpdating } = useFileProgress();
+  const { createAudioBookmark } = useBookmarks(fileId);
+  const [bookmarkDialogOpen, setBookmarkDialogOpen] = useState(false);
 
   const saveProgress = useCallback(
     async (currentTime: number, immediate = false) => {
@@ -173,6 +350,20 @@ function AudioPlayer({
     [fileId, duration, updateProgress, updateProgressImmediate]
   );
 
+  const handleAddAudioBookmark = async (title: string, note?: string) => {
+    await createAudioBookmark(fileId, title, currentTime, note);
+  };
+
+  const handleNavigateToAudioBookmark = useCallback((bookmark: Bookmark) => {
+    if (bookmark.position_data.type !== 'audio' || !audioRef.current) return;
+    
+    const { timestamp } = bookmark.position_data;
+    if (timestamp !== undefined) {
+      audioRef.current.currentTime = timestamp;
+      setCurrentTime(timestamp);
+    }
+  }, []);
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -193,7 +384,6 @@ function AudioPlayer({
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
 
-      // Save progress every 10 seconds (debounced)
       if (Math.floor(audio.currentTime) % 10 === 0) {
         saveProgress(audio.currentTime, false);
       }
@@ -201,7 +391,6 @@ function AudioPlayer({
 
     const handleEnded = () => {
       setIsPlaying(false);
-      // Save completion immediately
       saveProgress(audio.duration, true);
     };
 
@@ -234,7 +423,6 @@ function AudioPlayer({
 
     audio.currentTime = time;
     setCurrentTime(time);
-    // Save progress immediately when user seeks
     saveProgress(time, true);
   };
 
@@ -253,7 +441,8 @@ function AudioPlayer({
     if (isMuted) {
       audio.volume = volume;
       setIsMuted(false);
-    } else {
+    }
+    else {
       audio.volume = 0;
       setIsMuted(true);
     }
@@ -307,155 +496,185 @@ function AudioPlayer({
   }
 
   return (
-    <div className="space-y-6">
-      <audio ref={audioRef} src={`/api/files/${fileId}`} preload="metadata" />
-
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Main Audio Player */}
-      <Card className="border-2">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
-              <Headphones className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                Audio Player
-                <Badge variant="default" className="bg-emerald-600">
-                  Audio
-                </Badge>
+      <div className="lg:col-span-2 space-y-6">
+        <audio ref={audioRef} src={`/api/files/${fileId}`} preload="metadata" />
+
+        <Card className="border-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
+                <Headphones className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
-              <p className="text-sm text-muted-foreground font-normal">
-                {formatTime(duration)} •{" "}
-                {fileData.file_size
-                  ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
-                  : 0}{" "}
-                MB
-              </p>
-            </div>
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent className="space-y-6">
-          {/* Progress Section */}
-          <div className="space-y-4">
-            <div className="flex justify-between items-center text-sm">
-              <span className="flex items-center gap-2 text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                {formatTime(currentTime)}
-              </span>
-              <span className="text-muted-foreground">
-                {formatTime(duration)}
-              </span>
-            </div>
-
-            {/* Seek Bar */}
-            <div
-              className="w-full bg-secondary rounded-full h-3 cursor-pointer hover:h-4 transition-all group"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const percentage = x / rect.width;
-                seek(percentage * duration);
-              }}
-            >
-              <div
-                className="bg-primary h-full rounded-full transition-all duration-300 relative group-hover:bg-primary/90"
-                style={{ width: `${(currentTime / duration) * 100}%` }}
-              >
-                <div className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div>
+                <div className="flex items-center gap-2">
+                  Audio Player
+                  <Badge variant="default" className="bg-emerald-600">
+                    Audio
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground font-normal">
+                  {formatTime(duration)} •{" "}
+                  {fileData.file_size
+                    ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
+                    : 0}{" "}
+                  MB
+                </p>
               </div>
-            </div>
+            </CardTitle>
+          </CardHeader>
 
-            {/* Overall Progress */}
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Overall Progress</span>
-              <span className="font-medium">
-                {Math.round((currentTime / duration) * 100)}%
-              </span>
-            </div>
-          </div>
-
-          {/* Controls */}
-          <div className="flex items-center justify-center gap-6">
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => skip(-10)}
-              className="gap-2 h-12 px-6"
-            >
-              <SkipBack className="h-5 w-5" />
-              10s
-            </Button>
-
-            <Button
-              size="lg"
-              onClick={togglePlayPause}
-              className="h-14 w-14 rounded-full p-0"
-            >
-              {isPlaying ? (
-                <Pause className="h-7 w-7" />
-              ) : (
-                <Play className="h-7 w-7 ml-1" />
-              )}
-            </Button>
-
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => skip(10)}
-              className="gap-2 h-12 px-6"
-            >
-              10s
-              <SkipForward className="h-5 w-5" />
-            </Button>
-          </div>
-
-          {/* Volume Control */}
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleMute}
-              className="flex-shrink-0"
-            >
-              {getVolumeIcon()}
-            </Button>
-            <div
-              className="flex-1 bg-secondary rounded-full h-2 cursor-pointer"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const percentage = x / rect.width;
-                handleVolumeChange(percentage);
-              }}
-            >
-              <div
-                className="bg-primary h-full rounded-full transition-all"
-                style={{ width: `${isMuted ? 0 : volume * 100}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground w-8 text-right">
-              {Math.round((isMuted ? 0 : volume) * 100)}%
-            </span>
-          </div>
-
-          {/* Saved Progress Info */}
-          {fileData.progress && fileData.progress.progress_percentage > 0 && (
-            <div className="bg-muted/50 rounded-lg p-4">
-              <div className="flex items-center justify-between text-sm">
+          <CardContent className="space-y-6">
+            {/* Progress Section */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center text-sm">
                 <span className="flex items-center gap-2 text-muted-foreground">
-                  <BarChart3 className="h-4 w-4" />
-                  Last saved progress
-                  {isUpdating && <span className="text-xs">(updating...)</span>}
+                  <Clock className="h-4 w-4" />
+                  {formatTime(currentTime)}
                 </span>
+                <span className="text-muted-foreground">
+                  {formatTime(duration)}
+                </span>
+              </div>
+
+              {/* Seek Bar */}
+              <div
+                className="w-full bg-secondary rounded-full h-3 cursor-pointer hover:h-4 transition-all group"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const percentage = x / rect.width;
+                  seek(percentage * duration);
+                }}
+              >
+                <div
+                  className="bg-primary h-full rounded-full transition-all duration-300 relative group-hover:bg-primary/90"
+                  style={{ width: `${(currentTime / duration) * 100}%` }}
+                >
+                  <div className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
+
+              {/* Overall Progress */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Overall Progress</span>
                 <span className="font-medium">
-                  {Math.round(fileData.progress.progress_percentage)}%
+                  {Math.round((currentTime / duration) * 100)}%
                 </span>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            {/* Controls */}
+            <div className="flex items-center justify-center gap-6">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => skip(-10)}
+                className="gap-2 h-12 px-6"
+              >
+                <SkipBack className="h-5 w-5" />
+                10s
+              </Button>
+
+              <Button
+                size="lg"
+                onClick={togglePlayPause}
+                className="h-14 w-14 rounded-full p-0"
+              >
+                {isPlaying ? (
+                  <Pause className="h-7 w-7" />
+                ) : (
+                  <Play className="h-7 w-7 ml-1" />
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => skip(10)}
+                className="gap-2 h-12 px-6"
+              >
+                10s
+                <SkipForward className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* Bookmark Button */}
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => setBookmarkDialogOpen(true)}
+                className="gap-2"
+              >
+                <BookmarkIcon className="h-4 w-4" />
+                Bookmark Current Position
+              </Button>
+            </div>
+
+            {/* Volume Control */}
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleMute}
+                className="flex-shrink-0"
+              >
+                {getVolumeIcon()}
+              </Button>
+              <div
+                className="flex-1 bg-secondary rounded-full h-2 cursor-pointer"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const percentage = x / rect.width;
+                  handleVolumeChange(percentage);
+                }}
+              >
+                <div
+                  className="bg-primary h-full rounded-full transition-all"
+                  style={{ width: `${isMuted ? 0 : volume * 100}%` }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground w-8 text-right">
+                {Math.round((isMuted ? 0 : volume) * 100)}%
+              </span>
+            </div>
+
+            {/* Saved Progress Info */}
+            {fileData.progress && fileData.progress.progress_percentage > 0 && (
+              <div className="bg-muted/50 rounded-lg p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <BarChart3 className="h-4 w-4" />
+                    Last saved progress
+                    {isUpdating && <span className="text-xs">(updating...)</span>}
+                  </span>
+                  <span className="font-medium">
+                    {Math.round(fileData.progress.progress_percentage)}%
+                  </span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bookmarks Sidebar */}
+      <div className="space-y-6">
+        <BookmarkList 
+          fileId={fileId} 
+          onNavigateToBookmark={handleNavigateToAudioBookmark}
+        />
+      </div>
+
+      {/* Audio Bookmark Dialog */}
+      <BookmarkDialog
+        open={bookmarkDialogOpen}
+        onOpenChange={setBookmarkDialogOpen}
+        onSave={handleAddAudioBookmark}
+        position={`${formatTime(currentTime)}`}
+      />
     </div>
   );
 }
@@ -494,7 +713,6 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
         if (fileError) throw fileError;
 
-        // Type the file data to match our query structure
         const fileWithProgress = file as DatabaseFile & {
           file_progress: FileProgressData[] | null;
         };
@@ -625,9 +843,7 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
       {/* File Viewer */}
       {isAudio && <AudioPlayer fileId={fileId} fileData={fileData} />}
-
       {isText && <TextViewer fileId={fileId} fileData={fileData} />}
-
-      </div>
-  )
+    </div>
+  );
 }

@@ -1,7 +1,7 @@
 import { Tables } from "./supabase/database.types";
 
 // Database table row types (renamed to avoid conflict with browser File type)
-export type DatabaseFile = Tables<"files">;
+export type DatabaseFile = Tables<"files"> & { text_content: string | null; };
 export type FileProgress = Tables<"file_progress">;
 export type Collection = Tables<"collections">;
 export type Tag = Tables<"tags">;

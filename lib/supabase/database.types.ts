@@ -9,6 +9,54 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      bookmarks: {
+        Row: {
+          created_at: string | null
+          file_id: string
+          id: string
+          note: string | null
+          position_data: Json
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          file_id: string
+          id?: string
+          note?: string | null
+          position_data: Json
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          file_id?: string
+          id?: string
+          note?: string | null
+          position_data?: Json
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookmarks_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookmarks_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files_with_progress"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       collection_files: {
         Row: {
           added_at: string | null
@@ -208,7 +256,6 @@ export type Database = {
           title: string | null
           uploaded_at: string | null
           user_id: string
-          text_content: string | null
         }
         Insert: {
           author?: string | null
@@ -375,7 +422,6 @@ export type Database = {
           series: string | null
           series_index: number | null
           tags: string[] | null
-          text_content: string | null
           title: string | null
           uploaded_at: string | null
           user_id: string | null
