@@ -43,21 +43,36 @@ export async function GET(
       .eq('id', fileId)
       .eq('user_id', user.id);
 
-    // Convert blob to array buffer
-    const arrayBuffer = await fileData.arrayBuffer();
+    if (file.file_type === "text/plain") {
+      const textContent = await fileData.text();
+      return new NextResponse(textContent, {
+        headers: {
+          "Content-Type": "text/plain",
+          "Content-Disposition": `inline; filename="${file.filename}"`, // Suggests browser to display inline
+          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+        },
+      });
+    } else {
+      // Convert blob to array buffer for other file types
+      const arrayBuffer = await fileData.arrayBuffer();
 
-    // Return file with proper headers
-    return new NextResponse(arrayBuffer, {
-      headers: {
-        'Content-Type': file.file_type,
-        'Content-Length': (file.file_size || 0).toString(),
-        'Content-Disposition': `inline; filename="${file.filename}"`,
-        'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
-      },
-    });
+      // Return file with proper headers
+      return new NextResponse(arrayBuffer, {
+        headers: {
+          "Content-Type": file.file_type,
+          "Content-Length": (file.file_size || 0).toString(),
+          "Content-Disposition": `inline; filename="${file.filename}"`, // Suggests browser to display inline
+          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+        },
+      });
+    }
 
+  
   } catch (error) {
-    console.error('Error serving file:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Error serving file:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

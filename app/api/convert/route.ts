@@ -64,15 +64,10 @@ export async function POST(request: NextRequest) {
     // Save file metadata to database
     const fileInsert: TablesInsert<"files"> = {
       user_id: user.id,
-      filename: textFileName,
+      filename: file.name,
       file_path: storageData.path,
       file_type: 'text/plain',
       file_size: new Blob([conversionResult.text]).size,
-      original_filename: file.name,
-      original_file_type: file.type,
-      original_file_size: file.size,
-      text_content: conversionResult.text,
-      conversion_status: 'completed'
     };
 
     const { data: fileData, error: dbError } = await supabase

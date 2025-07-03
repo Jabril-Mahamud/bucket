@@ -1,47 +1,477 @@
+// components/file/file-viewer.tsx
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
   Download,
+  Volume2,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
   FileText,
-  Search,
   BookOpen,
-  Copy,
-  Check,
-  Eye,
-  EyeOff,
-  Type,
-  FileType,
-  Calendar,
-  HardDrive
+  Headphones,
+  Clock,
+  BarChart3,
+  VolumeX,
+  Volume1,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { DatabaseFile } from "@/lib/types";
+import {
+  FileWithProgressData,
+  DatabaseFile,
+  FileProgressData,
+} from "@/lib/types";
+import { useFileProgress } from "@/hooks/useFileProgress";
 
-interface FileViewerProps {
+// Text Viewer Component
+function TextViewer({
+  fileId,
+  fileData,
+}: {
   fileId: string;
+  fileData: FileWithProgressData;
+}) {
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [loadingText, setLoadingText] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchTextContent = async () => {
+      try {
+        setLoadingText(true);
+        const response = await fetch(`/api/files/${fileId}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const text = await response.text();
+        setTextContent(text);
+      } catch (e) {
+        console.error("Error fetching text content:", e);
+        setError("Failed to load text content.");
+      } finally {
+        setLoadingText(false);
+      }
+    };
+
+    fetchTextContent();
+  }, [fileId]);
+
+  if (loadingText) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-lg font-medium">Loading text...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="border-2">
+        <CardContent className="pt-12 pb-12 text-center space-y-6">
+          <div className="w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
+            <FileText className="h-10 w-10 text-destructive" />
+          </div>
+          <h3 className="text-xl font-semibold">Error loading content</h3>
+          <p className="text-muted-foreground max-w-md mx-auto">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+              <BookOpen className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                Text Document
+                <Badge variant="default" className="bg-blue-600">
+                  Text
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground font-normal">
+                {fileData.file_size
+                  ? Math.round((fileData.file_size / 1024) * 100) / 100
+                  : 0}{" "}
+                KB
+              </p>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="prose dark:prose-invert max-w-none h-[600px] overflow-y-auto p-4 border rounded-lg bg-background">
+            {textContent ? (
+              <p className="whitespace-pre-wrap">{textContent}</p>
+            ) : (
+              <p className="text-muted-foreground">No text content available.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
-export function FileViewer({ fileId }: FileViewerProps) {
-  const [fileData, setFileData] = useState<DatabaseFile | null>(null);
+// Audio Player Component
+function AudioPlayer({
+  fileId,
+  fileData,
+}: {
+  fileId: string;
+  fileData: FileWithProgressData;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showOriginalInfo, setShowOriginalInfo] = useState(false);
-  const [copied, setCopied] = useState(false);
+
+  const { updateProgress, updateProgressImmediate, isUpdating } =
+    useFileProgress();
+
+  const saveProgress = useCallback(
+    async (currentTime: number, immediate = false) => {
+      try {
+        if (!duration || duration === 0) return;
+
+        const progressPercentage = (currentTime / duration) * 100;
+
+        if (immediate) {
+          await updateProgressImmediate(
+            fileId,
+            progressPercentage,
+            currentTime.toString()
+          );
+        } else {
+          await updateProgress(
+            fileId,
+            progressPercentage,
+            currentTime.toString()
+          );
+        }
+      } catch (error) {
+        console.error("Error saving progress:", error);
+      }
+    },
+    [fileId, duration, updateProgress, updateProgressImmediate]
+  );
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+      setLoading(false);
+
+      if (fileData.progress?.last_position) {
+        const lastTime = parseFloat(fileData.progress.last_position);
+        if (lastTime > 0 && lastTime < audio.duration) {
+          audio.currentTime = lastTime;
+          setCurrentTime(lastTime);
+        }
+      }
+    };
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+
+      // Save progress every 10 seconds (debounced)
+      if (Math.floor(audio.currentTime) % 10 === 0) {
+        saveProgress(audio.currentTime, false);
+      }
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      // Save completion immediately
+      saveProgress(audio.duration, true);
+    };
+
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", handleEnded);
+    };
+  }, [fileData.progress, saveProgress]);
+
+  const togglePlayPause = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const seek = (time: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    audio.currentTime = time;
+    setCurrentTime(time);
+    // Save progress immediately when user seeks
+    saveProgress(time, true);
+  };
+
+  const skip = (seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
+    seek(newTime);
+  };
+
+  const toggleMute = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isMuted) {
+      audio.volume = volume;
+      setIsMuted(false);
+    } else {
+      audio.volume = 0;
+      setIsMuted(true);
+    }
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    setVolume(newVolume);
+    audio.volume = newVolume;
+    setIsMuted(newVolume === 0);
+  };
+
+  const formatTime = (time: number) => {
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
+    const seconds = Math.floor(time % 60);
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+        .toString()
+        .padStart(2, "0")}`;
+    }
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  const getVolumeIcon = () => {
+    if (isMuted || volume === 0) return <VolumeX className="h-4 w-4" />;
+    if (volume < 0.5) return <Volume1 className="h-4 w-4" />;
+    return <Volume2 className="h-4 w-4" />;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+            <Headphones className="h-8 w-8 text-primary animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+            <p className="text-lg font-medium">Loading audio...</p>
+            <p className="text-sm text-muted-foreground">
+              Preparing your audio file
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <audio ref={audioRef} src={`/api/files/${fileId}`} preload="metadata" />
+
+      {/* Main Audio Player */}
+      <Card className="border-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
+              <Headphones className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                Audio Player
+                <Badge variant="default" className="bg-emerald-600">
+                  Audio
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground font-normal">
+                {formatTime(duration)} •{" "}
+                {fileData.file_size
+                  ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
+                  : 0}{" "}
+                MB
+              </p>
+            </div>
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {/* Progress Section */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center text-sm">
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="h-4 w-4" />
+                {formatTime(currentTime)}
+              </span>
+              <span className="text-muted-foreground">
+                {formatTime(duration)}
+              </span>
+            </div>
+
+            {/* Seek Bar */}
+            <div
+              className="w-full bg-secondary rounded-full h-3 cursor-pointer hover:h-4 transition-all group"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const percentage = x / rect.width;
+                seek(percentage * duration);
+              }}
+            >
+              <div
+                className="bg-primary h-full rounded-full transition-all duration-300 relative group-hover:bg-primary/90"
+                style={{ width: `${(currentTime / duration) * 100}%` }}
+              >
+                <div className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </div>
+
+            {/* Overall Progress */}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Overall Progress</span>
+              <span className="font-medium">
+                {Math.round((currentTime / duration) * 100)}%
+              </span>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="flex items-center justify-center gap-6">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => skip(-10)}
+              className="gap-2 h-12 px-6"
+            >
+              <SkipBack className="h-5 w-5" />
+              10s
+            </Button>
+
+            <Button
+              size="lg"
+              onClick={togglePlayPause}
+              className="h-14 w-14 rounded-full p-0"
+            >
+              {isPlaying ? (
+                <Pause className="h-7 w-7" />
+              ) : (
+                <Play className="h-7 w-7 ml-1" />
+              )}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => skip(10)}
+              className="gap-2 h-12 px-6"
+            >
+              10s
+              <SkipForward className="h-5 w-5" />
+            </Button>
+          </div>
+
+          {/* Volume Control */}
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleMute}
+              className="flex-shrink-0"
+            >
+              {getVolumeIcon()}
+            </Button>
+            <div
+              className="flex-1 bg-secondary rounded-full h-2 cursor-pointer"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const percentage = x / rect.width;
+                handleVolumeChange(percentage);
+              }}
+            >
+              <div
+                className="bg-primary h-full rounded-full transition-all"
+                style={{ width: `${isMuted ? 0 : volume * 100}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground w-8 text-right">
+              {Math.round((isMuted ? 0 : volume) * 100)}%
+            </span>
+          </div>
+
+          {/* Saved Progress Info */}
+          {fileData.progress && fileData.progress.progress_percentage > 0 && (
+            <div className="bg-muted/50 rounded-lg p-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <BarChart3 className="h-4 w-4" />
+                  Last saved progress
+                  {isUpdating && <span className="text-xs">(updating...)</span>}
+                </span>
+                <span className="font-medium">
+                  {Math.round(fileData.progress.progress_percentage)}%
+                </span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function FileViewer({ fileId }: { fileId: string }) {
+  const [fileData, setFileData] = useState<FileWithProgressData | null>(null);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createClient();
 
   useEffect(() => {
     const fetchFile = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (!user) {
           router.push("/auth/login");
           return;
@@ -49,14 +479,39 @@ export function FileViewer({ fileId }: FileViewerProps) {
 
         const { data: file, error: fileError } = await supabase
           .from("files")
-          .select("*")
+          .select(
+            `
+            *,
+            file_progress (
+              progress_percentage,
+              last_position
+            )
+          `
+          )
           .eq("id", fileId)
           .eq("user_id", user.id)
           .single();
 
         if (fileError) throw fileError;
 
-        setFileData(file);
+        // Type the file data to match our query structure
+        const fileWithProgress = file as DatabaseFile & {
+          file_progress: FileProgressData[] | null;
+        };
+
+        const formattedFile: FileWithProgressData = {
+          ...fileWithProgress,
+          progress: fileWithProgress.file_progress?.[0]
+            ? {
+                progress_percentage:
+                  fileWithProgress.file_progress[0].progress_percentage || 0,
+                last_position:
+                  fileWithProgress.file_progress[0].last_position || "0",
+              }
+            : null,
+        };
+
+        setFileData(formattedFile);
       } catch (error) {
         console.error("Error fetching file:", error);
         router.push("/library");
@@ -68,39 +523,25 @@ export function FileViewer({ fileId }: FileViewerProps) {
     fetchFile();
   }, [fileId, router, supabase]);
 
-  // Highlight search terms in text
-  const highlightedText = useMemo(() => {
-    if (!fileData?.text_content || !searchTerm.trim()) {
-      return fileData?.text_content || "";
-    }
-
-    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    return fileData.text_content.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-800">$1</mark>');
-  }, [fileData?.text_content, searchTerm]);
-
-  const downloadTextFile = async () => {
-    if (!fileData?.text_content) return;
-
-    const blob = new Blob([fileData.text_content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileData.filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const copyToClipboard = async () => {
-    if (!fileData?.text_content) return;
+  const downloadFile = async () => {
+    if (!fileData) return;
 
     try {
-      await navigator.clipboard.writeText(fileData.text_content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      const response = await fetch(`/api/files/${fileId}`);
+      if (!response.ok) throw new Error("Download failed");
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileData.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
+      console.error("Error downloading file:", error);
+      alert("Failed to download file");
     }
   };
 
@@ -114,46 +555,12 @@ export function FileViewer({ fileId }: FileViewerProps) {
     });
   };
 
-  const formatFileSize = (bytes: number | null) => {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getFileTypeIcon = (fileType: string | null) => {
-    if (!fileType) return <FileText className="h-6 w-6" />;
-    
-    if (fileType === 'application/pdf') 
-      return <FileText className="h-6 w-6 text-red-500" />;
-    if (fileType === 'application/epub+zip') 
-      return <BookOpen className="h-6 w-6 text-indigo-500" />;
-    if (fileType.includes('word') || fileType === 'application/rtf') 
-      return <FileType className="h-6 w-6 text-blue-500" />;
-    
-    return <FileText className="h-6 w-6 text-slate-500" />;
-  };
-
-  const getStatusBadge = (status: string | null) => {
-    switch (status) {
-      case 'completed':
-        return <Badge variant="default" className="bg-green-600">Converted</Badge>;
-      case 'processing':
-        return <Badge variant="secondary">Processing</Badge>;
-      case 'failed':
-        return <Badge variant="destructive">Failed</Badge>;
-      default:
-        return <Badge variant="outline">Pending</Badge>;
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="text-lg font-medium">Loading document...</p>
+          <p className="text-lg font-medium">Loading file...</p>
         </div>
       </div>
     );
@@ -165,9 +572,9 @@ export function FileViewer({ fileId }: FileViewerProps) {
         <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
           <FileText className="h-8 w-8 text-destructive" />
         </div>
-        <h2 className="text-xl font-semibold mb-2">Document not found</h2>
+        <h2 className="text-xl font-semibold mb-2">File not found</h2>
         <p className="text-muted-foreground mb-6">
-          The requested document could not be located
+          The requested file could not be located
         </p>
         <Link href="/library">
           <Button className="gap-2">
@@ -178,6 +585,9 @@ export function FileViewer({ fileId }: FileViewerProps) {
       </div>
     );
   }
+
+  const isAudio = fileData.file_type.startsWith("audio/");
+  const isText = fileData.file_type === "text/plain";
 
   return (
     <div className="space-y-8">
@@ -190,123 +600,34 @@ export function FileViewer({ fileId }: FileViewerProps) {
               Back to Library
             </Button>
           </Link>
-          <Button variant="outline" onClick={downloadTextFile} className="gap-2">
+          <Button variant="outline" onClick={downloadFile} className="gap-2">
             <Download className="h-4 w-4" />
-            Download Text
-          </Button>
-          <Button variant="outline" onClick={copyToClipboard} className="gap-2">
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? 'Copied!' : 'Copy Text'}
+            Download
           </Button>
         </div>
 
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            {getFileTypeIcon(fileData.original_file_type)}
-            <h1 className="text-3xl font-bold tracking-tight line-clamp-2">
-              {fileData.filename}
-            </h1>
-            {getStatusBadge(fileData.conversion_status)}
-          </div>
-          
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight line-clamp-2">
+            {fileData.filename}
+          </h1>
           <div className="flex items-center gap-4 text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Calendar className="h-4 w-4" />
-              {formatDate(fileData.uploaded_at)}
-            </span>
+            <span>Uploaded {formatDate(fileData.uploaded_at)}</span>
             <span>•</span>
-            <span className="flex items-center gap-1">
-              <Type className="h-4 w-4" />
-              {fileData.text_content?.length.toLocaleString() || 0} characters
+            <span>
+              {fileData.file_size
+                ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
+                : 0}{" "}
+              MB
             </span>
-            {fileData.original_file_size && (
-              <>
-                <span>•</span>
-                <span className="flex items-center gap-1">
-                  <HardDrive className="h-4 w-4" />
-                  {formatFileSize(fileData.original_file_size)} original
-                </span>
-              </>
-            )}
           </div>
-
-          {/* Original File Info Toggle */}
-          {fileData.original_filename && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowOriginalInfo(!showOriginalInfo)}
-              className="gap-2"
-            >
-              {showOriginalInfo ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              {showOriginalInfo ? 'Hide' : 'Show'} Original File Info
-            </Button>
-          )}
-
-          {/* Original File Info */}
-          {showOriginalInfo && fileData.original_filename && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Original File Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div><strong>Original Name:</strong> {fileData.original_filename}</div>
-                <div><strong>Original Type:</strong> {fileData.original_file_type}</div>
-                <div><strong>Original Size:</strong> {formatFileSize(fileData.original_file_size)}</div>
-                <div><strong>Conversion Status:</strong> {fileData.conversion_status}</div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
 
-      {/* Search Bar */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search within this document..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          {searchTerm && (
-            <div className="mt-2 text-sm text-muted-foreground">
-              Search results will be highlighted in yellow below
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* File Viewer */}
+      {isAudio && <AudioPlayer fileId={fileId} fileData={fileData} />}
 
-      {/* Text Content */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Extracted Text Content
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {fileData.text_content ? (
-            <div 
-              className="prose prose-slate dark:prose-invert max-w-none whitespace-pre-wrap text-sm leading-relaxed p-6 bg-muted/30 rounded-lg border max-h-[70vh] overflow-y-auto"
-              dangerouslySetInnerHTML={{ __html: highlightedText }}
-            />
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No text content available</p>
-              {fileData.conversion_status !== 'completed' && (
-                <p className="text-sm mt-2">
-                  Text conversion may still be in progress
-                </p>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
+      {isText && <TextViewer fileId={fileId} fileData={fileData} />}
+
+      </div>
+  )
 }
