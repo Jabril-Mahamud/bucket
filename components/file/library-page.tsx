@@ -22,24 +22,27 @@ import {
   Trash2,
   Eye,
   BookOpen,
-  Headphones,
   Filter,
   SortAsc,
   Grid3X3,
   List,
-  Plus
+  Plus,
+  FileType,
+  Clock,
+  AlertCircle,
+  CheckCircle2
 } from "lucide-react";
 import { FileUpload } from "./file-upload";
 import Link from "next/link";
-import { LibraryFile, FileProgressData, DatabaseFile } from "@/lib/types";
+import { DatabaseFile } from "@/lib/types";
 
-type SortOption = 'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'size-asc' | 'size-desc';
-type FilterOption = 'all' | 'pdf' | 'text' | 'audio';
+type SortOption = 'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'size-asc' | 'size-desc' | 'text-length-asc' | 'text-length-desc';
+type FilterOption = 'all' | 'pdf' | 'epub' | 'doc' | 'text' | 'completed' | 'processing' | 'failed';
 type ViewMode = 'grid' | 'list';
 
 export function LibraryPage() {
-  const [files, setFiles] = useState<LibraryFile[]>([]);
-  const [filteredFiles, setFilteredFiles] = useState<LibraryFile[]>([]);
+  const [files, setFiles] = useState<DatabaseFile[]>([]);
+  const [filteredFiles, setFilteredFiles] = useState<DatabaseFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>('date-desc');
@@ -56,33 +59,14 @@ export function LibraryPage() {
 
       const { data: filesData, error } = await supabase
         .from('files')
-        .select(`
-          *,
-          file_progress (
-            progress_percentage,
-            last_position
-          )
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .order('uploaded_at', { ascending: false });
 
       if (error) throw error;
 
-      // Type the file data to match our query structure
-      const typedFilesData = filesData as (DatabaseFile & {
-        file_progress: FileProgressData[] | null;
-      })[];
-
-      const formattedFiles: LibraryFile[] = typedFilesData.map(file => ({
-        ...file,
-        progress: file.file_progress?.[0] ? {
-          progress_percentage: file.file_progress[0].progress_percentage || 0,
-          last_position: file.file_progress[0].last_position || '0'
-        } : null
-      }));
-
-      setFiles(formattedFiles);
-      setFilteredFiles(formattedFiles);
+      setFiles(filesData || []);
+      setFilteredFiles(filesData || []);
     } catch (error) {
       console.error('Error fetching files:', error);
     } finally {
@@ -99,8 +83,11 @@ export function LibraryPage() {
 
     // Apply search filter
     if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
       filtered = filtered.filter(file =>
-        file.filename.toLowerCase().includes(searchQuery.toLowerCase())
+        file.filename?.toLowerCase().includes(query) ||
+        file.original_filename?.toLowerCase().includes(query) ||
+        file.text_content?.toLowerCase().includes(query)
       );
     }
 
@@ -109,11 +96,19 @@ export function LibraryPage() {
       filtered = filtered.filter(file => {
         switch (filterBy) {
           case 'pdf':
-            return file.file_type === 'application/pdf';
+            return file.original_file_type === 'application/pdf';
+          case 'epub':
+            return file.original_file_type === 'application/epub+zip';
+          case 'doc':
+            return file.original_file_type?.includes('word') || file.original_file_type === 'application/rtf';
           case 'text':
-            return file.file_type.startsWith('text/') || file.file_type === 'application/epub+zip';
-          case 'audio':
-            return file.file_type.startsWith('audio/');
+            return file.original_file_type?.startsWith('text/');
+          case 'completed':
+            return file.conversion_status === 'completed';
+          case 'processing':
+            return file.conversion_status === 'processing';
+          case 'failed':
+            return file.conversion_status === 'failed';
           default:
             return true;
         }
@@ -124,17 +119,21 @@ export function LibraryPage() {
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'name-asc':
-          return a.filename.localeCompare(b.filename);
+          return (a.filename || '').localeCompare(b.filename || '');
         case 'name-desc':
-          return b.filename.localeCompare(a.filename);
+          return (b.filename || '').localeCompare(a.filename || '');
         case 'date-asc':
           return new Date(a.uploaded_at || '').getTime() - new Date(b.uploaded_at || '').getTime();
         case 'date-desc':
           return new Date(b.uploaded_at || '').getTime() - new Date(a.uploaded_at || '').getTime();
         case 'size-asc':
-          return (a.file_size || 0) - (b.file_size || 0);
+          return (a.original_file_size || 0) - (b.original_file_size || 0);
         case 'size-desc':
-          return (b.file_size || 0) - (a.file_size || 0);
+          return (b.original_file_size || 0) - (a.original_file_size || 0);
+        case 'text-length-asc':
+          return (a.text_content?.length || 0) - (b.text_content?.length || 0);
+        case 'text-length-desc':
+          return (b.text_content?.length || 0) - (a.text_content?.length || 0);
         default:
           return 0;
       }
@@ -143,29 +142,49 @@ export function LibraryPage() {
     setFilteredFiles(filtered);
   }, [files, searchQuery, sortBy, filterBy]);
 
-  const getFileIcon = (fileType: string) => {
-    if (fileType.startsWith('audio/')) 
-      return <Headphones className="h-8 w-8 text-emerald-500" />;
-    if (fileType === 'application/pdf') 
+  const getFileIcon = (originalFileType: string | null) => {
+    if (!originalFileType) return <FileText className="h-8 w-8 text-slate-500" />;
+    
+    if (originalFileType === 'application/pdf') 
       return <FileText className="h-8 w-8 text-red-500" />;
-    if (fileType === 'application/epub+zip') 
+    if (originalFileType === 'application/epub+zip') 
       return <BookOpen className="h-8 w-8 text-indigo-500" />;
+    if (originalFileType.includes('word') || originalFileType === 'application/rtf') 
+      return <FileType className="h-8 w-8 text-blue-500" />;
     return <FileText className="h-8 w-8 text-slate-500" />;
   };
 
-  const getFileTypeLabel = (fileType: string) => {
-    if (fileType.startsWith('audio/')) return 'Audio';
-    if (fileType === 'application/pdf') return 'PDF';
-    if (fileType === 'application/epub+zip') return 'EPUB';
-    if (fileType.startsWith('text/')) return 'Text';
-    return 'Unknown';
+  const getFileTypeLabel = (originalFileType: string | null) => {
+    if (!originalFileType) return 'Unknown';
+    
+    if (originalFileType === 'application/pdf') return 'PDF';
+    if (originalFileType === 'application/epub+zip') return 'EPUB';
+    if (originalFileType.includes('word')) return 'Word';
+    if (originalFileType === 'application/rtf') return 'RTF';
+    if (originalFileType.startsWith('text/')) return 'Text';
+    return 'Document';
   };
 
-  const getFileTypeBadgeVariant = (fileType: string): "default" | "secondary" | "destructive" | "outline" => {
-    if (fileType.startsWith('audio/')) return 'default';
-    if (fileType === 'application/pdf') return 'destructive';
-    if (fileType === 'application/epub+zip') return 'secondary';
+  const getFileTypeBadgeVariant = (originalFileType: string | null): "default" | "secondary" | "destructive" | "outline" => {
+    if (!originalFileType) return 'outline';
+    
+    if (originalFileType === 'application/pdf') return 'destructive';
+    if (originalFileType === 'application/epub+zip') return 'secondary';
+    if (originalFileType.includes('word') || originalFileType === 'application/rtf') return 'default';
     return 'outline';
+  };
+
+  const getStatusIcon = (status: string | null) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+      case 'processing':
+        return <Clock className="h-4 w-4 text-blue-500 animate-spin" />;
+      case 'failed':
+        return <AlertCircle className="h-4 w-4 text-red-500" />;
+      default:
+        return <Clock className="h-4 w-4 text-yellow-500" />;
+    }
   };
 
   const formatFileSize = (bytes: number | null) => {
@@ -185,18 +204,20 @@ export function LibraryPage() {
     });
   };
 
-  const deleteFile = async (file: LibraryFile) => {
+  const deleteFile = async (file: DatabaseFile) => {
     if (!confirm(`Are you sure you want to delete "${file.filename}"?`)) return;
 
     try {
       // Delete from storage
-      const { error: storageError } = await supabase.storage
-        .from('user-files')
-        .remove([file.file_path]);
+      if (file.file_path) {
+        const { error: storageError } = await supabase.storage
+          .from('user-files')
+          .remove([file.file_path]);
 
-      if (storageError) throw storageError;
+        if (storageError) console.warn('Storage deletion error:', storageError);
+      }
 
-      // Delete from database (this will cascade to file_progress)
+      // Delete from database
       const { error: dbError } = await supabase
         .from('files')
         .delete()
@@ -212,18 +233,18 @@ export function LibraryPage() {
     }
   };
 
-  const downloadFile = async (file: LibraryFile) => {
+  const downloadFile = async (file: DatabaseFile) => {
+    if (!file.text_content) {
+      alert('No text content available for download');
+      return;
+    }
+
     try {
-      const { data, error } = await supabase.storage
-        .from('user-files')
-        .download(file.file_path);
-
-      if (error) throw error;
-
-      const url = URL.createObjectURL(data);
+      const blob = new Blob([file.text_content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = file.filename;
+      a.download = file.filename || 'document.txt';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -251,9 +272,9 @@ export function LibraryPage() {
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">My Library</h1>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">Text Library</h1>
             <p className="text-sm sm:text-base lg:text-lg text-muted-foreground">
-              {files.length === 0 ? 'No files yet' : `${files.length} ${files.length === 1 ? 'file' : 'files'} in your collection`}
+              {files.length === 0 ? 'No documents yet' : `${files.length} ${files.length === 1 ? 'document' : 'documents'} converted to text`}
             </p>
           </div>
           <Button 
@@ -263,7 +284,7 @@ export function LibraryPage() {
           >
             <Plus className="h-4 w-4" />
             <span className="sm:hidden">Upload</span>
-            <span className="hidden sm:inline">Upload Files</span>
+            <span className="hidden sm:inline">Upload Documents</span>
           </Button>
         </div>
       </div>
@@ -286,7 +307,7 @@ export function LibraryPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search your library..."
+                placeholder="Search documents by name or content..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 h-11"
@@ -302,10 +323,14 @@ export function LibraryPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Files</SelectItem>
+                    <SelectItem value="all">All Documents</SelectItem>
                     <SelectItem value="pdf">PDFs</SelectItem>
-                    <SelectItem value="text">Books</SelectItem>
-                    <SelectItem value="audio">Audio</SelectItem>
+                    <SelectItem value="epub">EPUBs</SelectItem>
+                    <SelectItem value="doc">Word Documents</SelectItem>
+                    <SelectItem value="text">Text Files</SelectItem>
+                    <SelectItem value="completed">✓ Converted</SelectItem>
+                    <SelectItem value="processing">⏳ Processing</SelectItem>
+                    <SelectItem value="failed">❌ Failed</SelectItem>
                   </SelectContent>
                 </Select>
                 
@@ -319,8 +344,10 @@ export function LibraryPage() {
                     <SelectItem value="date-asc">Oldest First</SelectItem>
                     <SelectItem value="name-asc">Name A-Z</SelectItem>
                     <SelectItem value="name-desc">Name Z-A</SelectItem>
-                    <SelectItem value="size-desc">Largest First</SelectItem>
-                    <SelectItem value="size-asc">Smallest First</SelectItem>
+                    <SelectItem value="size-desc">Largest Original</SelectItem>
+                    <SelectItem value="size-asc">Smallest Original</SelectItem>
+                    <SelectItem value="text-length-desc">Most Text</SelectItem>
+                    <SelectItem value="text-length-asc">Least Text</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -363,19 +390,19 @@ export function LibraryPage() {
               )}
             </div>
             <h3 className="text-lg sm:text-xl font-semibold mb-2">
-              {files.length === 0 ? "Your library is empty" : "No files found"}
+              {files.length === 0 ? "Your text library is empty" : "No documents found"}
             </h3>
             <p className="text-sm sm:text-base text-muted-foreground mb-4 sm:mb-6 max-w-md mx-auto px-4">
               {files.length === 0 
-                ? "Upload your first document or audio file to get started building your personal library" 
+                ? "Upload your first document to convert it to searchable text" 
                 : "Try adjusting your search terms or filters to find what you're looking for"
               }
             </p>
             {files.length === 0 && (
               <Button onClick={() => setShowUpload(true)} size="lg" className="gap-2 w-full sm:w-auto">
                 <Plus className="h-4 w-4" />
-                <span className="sm:hidden">Upload File</span>
-                <span className="hidden sm:inline">Upload Your First File</span>
+                <span className="sm:hidden">Upload Document</span>
+                <span className="hidden sm:inline">Upload Your First Document</span>
               </Button>
             )}
           </CardContent>
@@ -387,40 +414,35 @@ export function LibraryPage() {
               <CardHeader className="pb-4">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0">
-                    {getFileIcon(file.file_type)}
+                    {getFileIcon(file.original_file_type)}
                   </div>
                   <div className="flex-1 min-w-0 space-y-2">
-                    <CardTitle className="text-sm sm:text-base line-clamp-2 leading-tight" title={file.filename}>
+                    <CardTitle className="text-sm sm:text-base line-clamp-2 leading-tight" title={file.filename || ''}>
                       {file.filename}
                     </CardTitle>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                      <Badge variant={getFileTypeBadgeVariant(file.file_type)} className="text-xs w-fit">
-                        {getFileTypeLabel(file.file_type)}
+                      <Badge variant={getFileTypeBadgeVariant(file.original_file_type)} className="text-xs w-fit">
+                        {getFileTypeLabel(file.original_file_type)}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {formatFileSize(file.file_size)}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {getStatusIcon(file.conversion_status)}
+                        <span className="text-xs text-muted-foreground">
+                          {file.conversion_status}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </CardHeader>
               
               <CardContent className="space-y-4">
-                {/* Progress Bar */}
-                {file.progress && file.progress.progress_percentage > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Progress</span>
-                      <span className="font-medium">{Math.round(file.progress.progress_percentage)}%</span>
-                    </div>
-                    <div className="w-full bg-secondary rounded-full h-2">
-                      <div 
-                        className="bg-primary h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${file.progress.progress_percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
+                {/* Text Length Info */}
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <div>Text: {(file.text_content?.length || 0).toLocaleString()} chars</div>
+                  {file.original_file_size && (
+                    <div>Original: {formatFileSize(file.original_file_size)}</div>
+                  )}
+                </div>
                 
                 {/* Date */}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -431,9 +453,9 @@ export function LibraryPage() {
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   <Link href={`/library/view/${file.id}`} className="flex-1">
-                    <Button size="sm" className="w-full gap-2 text-xs sm:text-sm">
+                    <Button size="sm" className="w-full gap-2 text-xs sm:text-sm" disabled={file.conversion_status !== 'completed'}>
                       <Eye className="h-3 w-3" />
-                      Open
+                      {file.conversion_status === 'completed' ? 'Read' : 'Processing...'}
                     </Button>
                   </Link>
                   <div className="flex gap-2">
@@ -442,6 +464,7 @@ export function LibraryPage() {
                       variant="outline"
                       onClick={() => downloadFile(file)}
                       className="gap-1 flex-1 sm:flex-none"
+                      disabled={!file.text_content}
                     >
                       <Download className="h-3 w-3" />
                       <span className="sm:hidden">Download</span>
@@ -470,26 +493,27 @@ export function LibraryPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="flex-shrink-0">
-                      {getFileIcon(file.file_type)}
+                      {getFileIcon(file.original_file_type)}
                     </div>
                     
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-1">
                         <h3 className="font-medium truncate text-sm sm:text-base">{file.filename}</h3>
-                        <Badge variant={getFileTypeBadgeVariant(file.file_type)} className="text-xs w-fit">
-                          {getFileTypeLabel(file.file_type)}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={getFileTypeBadgeVariant(file.original_file_type)} className="text-xs w-fit">
+                            {getFileTypeLabel(file.original_file_type)}
+                          </Badge>
+                          {getStatusIcon(file.conversion_status)}
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
-                        <span>{formatFileSize(file.file_size)}</span>
+                        <span>{(file.text_content?.length || 0).toLocaleString()} characters</span>
                         <span className="hidden sm:inline">•</span>
                         <span>{formatDate(file.uploaded_at)}</span>
-                        {file.file_type.startsWith('audio/') && file.progress && file.progress.progress_percentage > 0 && (
+                        {file.original_file_size && (
                           <>
                             <span className="hidden sm:inline">•</span>
-                            <span className="text-primary font-medium">
-                              {Math.round(file.progress.progress_percentage)}% complete
-                            </span>
+                            <span>{formatFileSize(file.original_file_size)} original</span>
                           </>
                         )}
                       </div>
@@ -498,9 +522,9 @@ export function LibraryPage() {
 
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                     <Link href={`/library/view/${file.id}`} className="flex-1 sm:flex-none">
-                      <Button size="sm" className="gap-2 w-full sm:w-auto">
+                      <Button size="sm" className="gap-2 w-full sm:w-auto" disabled={file.conversion_status !== 'completed'}>
                         <Eye className="h-3 w-3" />
-                        Open
+                        {file.conversion_status === 'completed' ? 'Read' : 'Processing...'}
                       </Button>
                     </Link>
                     <div className="flex gap-2">
@@ -509,6 +533,7 @@ export function LibraryPage() {
                         variant="outline"
                         onClick={() => downloadFile(file)}
                         className="flex-1 sm:flex-none"
+                        disabled={!file.text_content}
                       >
                         <Download className="h-3 w-3" />
                         <span className="sm:hidden ml-1">Download</span>

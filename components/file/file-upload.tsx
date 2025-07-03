@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -13,77 +12,92 @@ import {
   XCircle, 
   Loader2,
   FileText,
-  Music,
   BookOpen,
   X,
-  RotateCcw
+  RotateCcw,
+  FileType
 } from "lucide-react";
 import { cn, UploadFile } from "@/lib/utils";
-import { TablesInsert } from "@/lib/supabase/database.types";
+
+// Supported file types for text conversion
+const SUPPORTED_TYPES = {
+  'application/pdf': ['.pdf'],
+  'application/epub+zip': ['.epub'],
+  'text/plain': ['.txt'],
+  'application/msword': ['.doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/rtf': ['.rtf'],
+  'text/html': ['.html'],
+  'text/markdown': ['.md']
+};
 
 export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void }) {
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  
-  const supabase = createClient();
 
   const handleUploadFiles = useCallback(async (filesToUpload: UploadFile[]) => {
     setIsUploading(true);
     
     for (const uploadFile of filesToUpload) {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
-
-        // Create file path: user_id/filename
-        const filePath = `${user.id}/${uploadFile.file.name}`;
-        
-        // Upload to Supabase Storage
-        const { data: storageData, error: storageError } = await supabase.storage
-          .from('user-files')
-          .upload(filePath, uploadFile.file, {
-            upsert: false
-          });
-
-        if (storageError) throw storageError;
-
-        // Update progress
+        // Update progress to show conversion starting
         setUploadFiles(prev => prev.map(f => 
           f.id === uploadFile.id 
-            ? { ...f, progress: 70 }
+            ? { ...f, progress: 10, status: 'uploading' as const }
             : f
         ));
 
-        // Save metadata to database using typed insert
-        const fileInsert: TablesInsert<"files"> = {
-          user_id: user.id,
-          filename: uploadFile.file.name,
-          file_path: storageData.path,
-          file_type: uploadFile.file.type,
-          file_size: uploadFile.file.size
-        };
+        // Create form data for the conversion API
+        const formData = new FormData();
+        formData.append('file', uploadFile.file);
 
-        const { error: dbError } = await supabase
-          .from('files')
-          .insert(fileInsert);
+        // Update progress to show file being processed
+        setUploadFiles(prev => prev.map(f => 
+          f.id === uploadFile.id 
+            ? { ...f, progress: 30 }
+            : f
+        ));
 
-        if (dbError) throw dbError;
+        // Call the conversion API
+        const response = await fetch('/api/convert', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Conversion failed');
+        }
+
+        const result = await response.json();
+
+        // Update progress to show conversion completing
+        setUploadFiles(prev => prev.map(f => 
+          f.id === uploadFile.id 
+            ? { ...f, progress: 90 }
+            : f
+        ));
 
         // Mark as complete
         setUploadFiles(prev => prev.map(f => 
           f.id === uploadFile.id 
-            ? { ...f, progress: 100, status: 'success' as const }
+            ? { 
+                ...f, 
+                progress: 100, 
+                status: 'success' as const,
+                convertedTextLength: result.textLength
+              }
             : f
         ));
 
       } catch (error) {
-        console.error('Upload error:', error);
+        console.error('Conversion error:', error);
         setUploadFiles(prev => prev.map(f => 
           f.id === uploadFile.id 
             ? { 
                 ...f, 
                 status: 'error' as const, 
-                error: error instanceof Error ? error.message : 'Upload failed'
+                error: error instanceof Error ? error.message : 'Conversion failed'
               }
             : f
         ));
@@ -92,7 +106,7 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
     
     setIsUploading(false);
     onUploadComplete?.();
-  }, [supabase, onUploadComplete]);
+  }, [onUploadComplete]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles: UploadFile[] = acceptedFiles.map(file => ({
@@ -108,12 +122,7 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: {
-      'application/pdf': ['.pdf'],
-      'text/plain': ['.txt'],
-      'application/epub+zip': ['.epub'],
-      'audio/*': ['.mp3', '.wav', '.m4a', '.aac', '.ogg']
-    },
+    accept: SUPPORTED_TYPES,
     multiple: true
   });
 
@@ -138,13 +147,21 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
   };
 
   const getFileIcon = (file: File) => {
-    if (file.type.startsWith('audio/')) 
-      return <Music className="h-5 w-5 text-emerald-500" />;
     if (file.type === 'application/pdf') 
       return <FileText className="h-5 w-5 text-red-500" />;
     if (file.type === 'application/epub+zip') 
       return <BookOpen className="h-5 w-5 text-indigo-500" />;
+    if (file.type.includes('word') || file.type === 'application/rtf') 
+      return <FileType className="h-5 w-5 text-blue-500" />;
     return <File className="h-5 w-5 text-slate-500" />;
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (
@@ -176,27 +193,28 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             <div className="space-y-2">
               <p className="text-lg font-medium text-primary">Drop your files here</p>
               <p className="text-sm text-muted-foreground">
-                Release to upload
+                Files will be converted to text automatically
               </p>
             </div>
           ) : (
             <div className="space-y-3">
               <div>
                 <p className="text-lg font-medium mb-1">
-                  Drag & drop files here
+                  Upload documents for text conversion
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  or click to browse your files
+                  Files will be converted to searchable text and saved to your library
                 </p>
               </div>
               
               <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
                 <span className="px-2 py-1 bg-muted rounded">PDF</span>
                 <span className="px-2 py-1 bg-muted rounded">EPUB</span>
+                <span className="px-2 py-1 bg-muted rounded">DOC/DOCX</span>
                 <span className="px-2 py-1 bg-muted rounded">TXT</span>
-                <span className="px-2 py-1 bg-muted rounded">MP3</span>
-                <span className="px-2 py-1 bg-muted rounded">WAV</span>
-                <span className="px-2 py-1 bg-muted rounded">M4A</span>
+                <span className="px-2 py-1 bg-muted rounded">RTF</span>
+                <span className="px-2 py-1 bg-muted rounded">HTML</span>
+                <span className="px-2 py-1 bg-muted rounded">Markdown</span>
               </div>
             </div>
           )}
@@ -210,7 +228,7 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Loader2 className={cn("h-5 w-5", isUploading ? "animate-spin" : "hidden")} />
-                Upload Progress
+                Text Conversion Progress
                 <span className="text-sm font-normal text-muted-foreground">
                   ({uploadFiles.filter(f => f.status === 'success').length}/{uploadFiles.length} completed)
                 </span>
@@ -262,7 +280,7 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
                           <XCircle className="h-4 w-4 text-red-500" />
                         )}
                         <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {Math.round(uploadFile.file.size / 1024 / 1024 * 100) / 100} MB
+                          {formatFileSize(uploadFile.file.size)}
                         </span>
                         {uploadFile.status !== 'uploading' && (
                           <Button
@@ -281,7 +299,11 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
                       <div className="mt-2">
                         <Progress value={uploadFile.progress} className="h-2" />
                         <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                          <span>Uploading...</span>
+                          <span>
+                            {uploadFile.progress < 30 ? 'Uploading...' :
+                             uploadFile.progress < 90 ? 'Converting to text...' :
+                             'Finalizing...'}
+                          </span>
                           <span>{uploadFile.progress}%</span>
                         </div>
                       </div>
@@ -289,7 +311,12 @@ export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void
                     
                     {uploadFile.status === 'success' && (
                       <p className="text-xs text-green-600 mt-1">
-                        ✓ Upload completed successfully
+                        ✓ Converted to text successfully
+                        {uploadFile.convertedTextLength && (
+                          <span className="ml-2 text-muted-foreground">
+                            ({uploadFile.convertedTextLength.toLocaleString()} characters)
+                          </span>
+                        )}
                       </p>
                     )}
                     

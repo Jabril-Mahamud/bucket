@@ -10,4 +10,5 @@ export interface UploadFile {
   progress: number;
   status: "uploading" | "success" | "error";
   error?: string;
+    convertedTextLength?: number;
 }
