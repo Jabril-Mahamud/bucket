@@ -392,6 +392,90 @@ export type Database = {
         }
         Relationships: []
       }
+      tts_usage: {
+        Row: {
+          audio_url: string | null
+          character_count: number
+          cost_cents: number | null
+          created_at: string | null
+          file_id: string | null
+          id: string
+          month_year: string | null
+          text_snippet: string
+          user_id: string
+          voice_id: string
+        }
+        Insert: {
+          audio_url?: string | null
+          character_count: number
+          cost_cents?: number | null
+          created_at?: string | null
+          file_id?: string | null
+          id?: string
+          month_year?: string | null
+          text_snippet: string
+          user_id: string
+          voice_id: string
+        }
+        Update: {
+          audio_url?: string | null
+          character_count?: number
+          cost_cents?: number | null
+          created_at?: string | null
+          file_id?: string | null
+          id?: string
+          month_year?: string | null
+          text_snippet?: string
+          user_id?: string
+          voice_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tts_usage_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tts_usage_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files_with_progress"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tts_monthly_usage: {
+        Row: {
+          created_at: string | null
+          id: string
+          month_year: string
+          total_characters: number | null
+          total_cost_cents: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          month_year: string
+          total_characters?: number | null
+          total_cost_cents?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          month_year?: string
+          total_characters?: number | null
+          total_cost_cents?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       files_with_progress: {
@@ -456,6 +540,14 @@ export type Database = {
           search_rank: number
         }[]
       }
+      get_current_month_tts_usage: {
+        Args: { target_user_id: string };
+        Returns: {
+          total_characters: number;
+          total_cost_cents: number;
+          current_month: string;
+        }[];
+      };
     }
     Enums: {
       [_ in never]: never

@@ -43,6 +43,8 @@ import { useFileProgress } from "@/hooks/useFileProgress";
 import { useBookmarks, Bookmark } from "@/hooks/useBookmarks";
 import { BookmarkDialog } from "@/components/bookmark/bookmark-dialog";
 import { BookmarkList } from "@/components/bookmark/bookmark-list";
+import { useTTS } from "@/hooks/useTTS";
+import { toast } from "sonner";
 
 // Text Viewer Component with Bookmark Support
 function TextViewer({
@@ -684,13 +686,39 @@ export function FileViewer({ fileId }: { fileId: string }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createClient();
+  const { convertToSpeech, isLoading: isTtsLoading } = useTTS();
+
+  const handleConvertToAudio = async () => {
+    if (!fileData?.text_content) {
+      toast.error("No text content available to convert to audio.");
+      return;
+    }
+
+    const toastId = toast.loading("Starting audio conversion...", {
+      description: `File: ${fileData.filename}`,
+    });
+
+    try {
+      await convertToSpeech(fileData.text_content, { fileId: fileData.id, autoPlay: false });
+      toast.success("Conversion complete!", {
+        id: toastId,
+        description: "The new audio file will be available in your library shortly.",
+      });
+      // Optional: You might want to refresh or redirect
+      // router.refresh(); // This would re-run the server-side rendering
+    } catch (error) {
+      console.error("TTS conversion error:", error);
+      toast.error("Audio conversion failed", {
+        id: toastId,
+        description: error instanceof Error ? error.message : "Please try again later.",
+      });
+    }
+  };
 
   useEffect(() => {
     const fetchFile = async () => {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        const { data: { user }, } = await supabase.auth.getUser();
         if (!user) {
           router.push("/auth/login");
           return;
@@ -822,6 +850,17 @@ export function FileViewer({ fileId }: { fileId: string }) {
             <Download className="h-4 w-4" />
             Download
           </Button>
+          {fileData.text_content && (
+            <Button 
+              variant="outline" 
+              onClick={handleConvertToAudio} 
+              disabled={isTtsLoading}
+              className="gap-2"
+            >
+              <Volume2 className="h-4 w-4" />
+              Convert to Audio
+            </Button>
+          )}
         </div>
 
         <div className="space-y-2">

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Library } from "lucide-react";
+import { BarChart3, BookOpen, Library } from "lucide-react";
 import { AuthButton } from "./auth-button";
 import { Button } from "./ui/button";
 
@@ -27,6 +27,12 @@ export function Header() {
               <Link href="/library" className="gap-1.5 text-sm font-medium">
                 <Library className="h-3.5 w-3.5" />
                 Library
+              </Link>
+            </Button>
+             <Button asChild variant="ghost" size="sm" className="h-8 px-3">
+              <Link href="/library/usage" className="gap-1.5 text-sm font-medium">
+                <BarChart3 className="h-3.5 w-3.5" />
+                Usage
               </Link>
             </Button>
           </nav>
