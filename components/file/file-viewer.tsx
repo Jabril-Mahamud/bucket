@@ -25,12 +25,12 @@ import {
   BookOpen,
   Headphones,
   Clock,
-  BarChart3,
   VolumeX,
   Volume1,
   Bookmark as BookmarkIcon,
   Copy,
   Search,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -46,27 +46,295 @@ import { BookmarkList } from "@/components/bookmark/bookmark-list";
 import { useTTS } from "@/hooks/useTTS";
 import { toast } from "sonner";
 
-// Text Viewer Component with Bookmark Support
-function TextViewer({
+interface AudioPlayerProps {
+  audioFileId: string;
+  onTimeUpdate?: (currentTime: number, duration: number) => void;
+  onBookmark?: () => void;
+  className?: string;
+}
+
+// Standalone Audio Player Component
+function AudioPlayer({ audioFileId, onTimeUpdate, onBookmark, className }: AudioPlayerProps) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const { updateProgress, updateProgressImmediate } = useFileProgress();
+
+  // Initialize audio
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const audioUrl = `/api/files/${audioFileId}`;
+    audio.src = audioUrl;
+    audio.preload = "metadata";
+
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+      setLoading(false);
+      setError(null);
+    };
+
+    const handleTimeUpdate = () => {
+      const current = audio.currentTime;
+      setCurrentTime(current);
+      onTimeUpdate?.(current, audio.duration);
+
+      // Save progress every 10 seconds
+      if (Math.floor(current) % 10 === 0) {
+        updateProgress(audioFileId, (current / audio.duration) * 100, current.toString());
+      }
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      updateProgressImmediate(audioFileId, 100, audio.duration.toString());
+    };
+
+    const handleError = (e: Event) => {
+      console.error('Audio error:', e);
+      setError('Failed to load audio file');
+      setLoading(false);
+    };
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("error", handleError);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("error", handleError);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+    };
+  }, [audioFileId, onTimeUpdate, updateProgress, updateProgressImmediate]);
+
+  const togglePlayPause = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    try {
+      if (isPlaying) {
+        audio.pause();
+      } else {
+        await audio.play();
+      }
+    } catch (err) {
+      console.error('Playback error:', err);
+      setError('Playback failed');
+    }
+  };
+
+  const seek = (time: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    audio.currentTime = time;
+    setCurrentTime(time);
+    updateProgressImmediate(audioFileId, (time / duration) * 100, time.toString());
+  };
+
+  const skip = (seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
+    seek(newTime);
+  };
+
+  const toggleMute = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isMuted) {
+      audio.volume = volume;
+      setIsMuted(false);
+    } else {
+      audio.volume = 0;
+      setIsMuted(true);
+    }
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    setVolume(newVolume);
+    audio.volume = newVolume;
+    setIsMuted(newVolume === 0);
+  };
+
+  const formatTime = (time: number) => {
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
+    const seconds = Math.floor(time % 60);
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+    }
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  const getVolumeIcon = () => {
+    if (isMuted || volume === 0) return <VolumeX className="h-4 w-4" />;
+    if (volume < 0.5) return <Volume1 className="h-4 w-4" />;
+    return <Volume2 className="h-4 w-4" />;
+  };
+
+  if (loading) {
+    return (
+      <div className={`flex items-center justify-center min-h-[120px] ${className}`}>
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="text-sm text-muted-foreground">Loading audio...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={`p-4 text-center ${className}`}>
+        <div className="text-destructive text-sm">{error}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`space-y-4 ${className}`}>
+      <audio ref={audioRef} />
+      
+      {/* Progress Section */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center text-sm">
+          <span className="flex items-center gap-2 text-muted-foreground">
+            <Clock className="h-4 w-4" />
+            {formatTime(currentTime)}
+          </span>
+          <span className="text-muted-foreground">{formatTime(duration)}</span>
+        </div>
+
+        {/* Seek Bar */}
+        <div
+          className="w-full bg-secondary rounded-full h-3 cursor-pointer hover:h-4 transition-all group relative"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const percentage = x / rect.width;
+            seek(percentage * duration);
+          }}
+        >
+          <div
+            className="bg-primary h-full rounded-full transition-all duration-300 relative group-hover:bg-primary/90"
+            style={{ width: `${(currentTime / duration) * 100}%` }}
+          >
+            <div className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Progress</span>
+          <span className="font-medium">{Math.round((currentTime / duration) * 100)}%</span>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center justify-center gap-4">
+        <Button variant="outline" size="sm" onClick={() => skip(-10)} className="gap-2">
+          <SkipBack className="h-4 w-4" />
+          10s
+        </Button>
+
+        <Button
+          size="lg"
+          onClick={togglePlayPause}
+          className="h-12 w-12 rounded-full p-0"
+          disabled={!duration}
+        >
+          {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 ml-1" />}
+        </Button>
+
+        <Button variant="outline" size="sm" onClick={() => skip(10)} className="gap-2">
+          10s
+          <SkipForward className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Additional Controls */}
+      <div className="flex items-center justify-between">
+        {/* Volume Control */}
+        <div className="flex items-center gap-3 flex-1 max-w-xs">
+          <Button variant="ghost" size="sm" onClick={toggleMute} className="flex-shrink-0">
+            {getVolumeIcon()}
+          </Button>
+          <div
+            className="flex-1 bg-secondary rounded-full h-2 cursor-pointer"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const percentage = x / rect.width;
+              handleVolumeChange(percentage);
+            }}
+          >
+            <div
+              className="bg-primary h-full rounded-full transition-all"
+              style={{ width: `${isMuted ? 0 : volume * 100}%` }}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground w-8 text-right">
+            {Math.round((isMuted ? 0 : volume) * 100)}%
+          </span>
+        </div>
+
+        {/* Bookmark Button */}
+        {onBookmark && (
+          <Button variant="outline" size="sm" onClick={onBookmark} className="gap-2">
+            <BookmarkIcon className="h-4 w-4" />
+            Bookmark
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Text + Audio Combined Component
+function TextWithAudioViewer({
   fileId,
-  fileData,
-  relatedAudioFile,
+  textFileData,
+  audioFileData,
 }: {
   fileId: string;
-  fileData: FileWithProgressData;
-  relatedAudioFile?: FileWithProgressData;
+  textFileData: FileWithProgressData;
+  audioFileData?: FileWithProgressData;
 }) {
   const [textContent, setTextContent] = useState<string | null>(null);
   const [loadingText, setLoadingText] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedText, setSelectedText] = useState<string>("");
   const [selectionPosition, setSelectionPosition] = useState<number | null>(null);
-  
   const [bookmarkDialogOpen, setBookmarkDialogOpen] = useState(false);
+  const [audioBookmarkDialogOpen, setAudioBookmarkDialogOpen] = useState(false);
+  const [currentAudioTime, setCurrentAudioTime] = useState(0);
+  
   const textContainerRef = useRef<HTMLDivElement>(null);
+  const { createTextBookmark, createAudioBookmark } = useBookmarks(fileId);
 
-  const { createTextBookmark } = useBookmarks(fileId);
-
+  // Load text content
   useEffect(() => {
     const fetchTextContent = async () => {
       try {
@@ -110,7 +378,7 @@ function TextViewer({
     }
   };
 
-  const handleAddBookmark = async (title: string, note?: string) => {
+  const handleAddTextBookmark = async (title: string, note?: string) => {
     if (selectionPosition === null) return;
 
     // Find paragraph index
@@ -137,42 +405,53 @@ function TextViewer({
     );
   };
 
-  const handleNavigateToBookmark = useCallback((bookmark: Bookmark) => {
-    if (bookmark.position_data.type !== 'text') return;
+  const handleAddAudioBookmark = async (title: string, note?: string) => {
+    await createAudioBookmark(fileId, title, currentAudioTime, note);
+  };
 
-    const { paragraph } = bookmark.position_data;
-    const textContainer = textContainerRef.current;
-    
-    if (textContainer && paragraph !== undefined) {
-      // Find the paragraph element and scroll to it
-      const paragraphElements = textContainer.querySelectorAll('p');
-      if (paragraphElements[paragraph]) {
-        paragraphElements[paragraph].scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'center' 
-        });
-        
-        // Highlight the paragraph briefly
-        paragraphElements[paragraph].classList.add('bg-yellow-200', 'dark:bg-yellow-900/30');
-        setTimeout(() => {
-          paragraphElements[paragraph].classList.remove('bg-yellow-200', 'dark:bg-yellow-900/30');
-        }, 2000);
+  const handleNavigateToBookmark = useCallback((bookmark: Bookmark) => {
+    if (bookmark.position_data.type === 'text') {
+      const { paragraph } = bookmark.position_data;
+      const textContainer = textContainerRef.current;
+      
+      if (textContainer && paragraph !== undefined) {
+        const paragraphElements = textContainer.querySelectorAll('p');
+        if (paragraphElements[paragraph]) {
+          paragraphElements[paragraph].scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+          
+          // Highlight the paragraph briefly
+          paragraphElements[paragraph].classList.add('bg-yellow-200', 'dark:bg-yellow-900/30');
+          setTimeout(() => {
+            paragraphElements[paragraph].classList.remove('bg-yellow-200', 'dark:bg-yellow-900/30');
+          }, 2000);
+        }
       }
     }
+    // Audio bookmark navigation would need to seek to the timestamp
+    // This could be implemented by passing a callback to the audio player
   }, []);
 
   const handleCopyText = () => {
     if (selectedText) {
       navigator.clipboard.writeText(selectedText);
+      toast.success("Text copied to clipboard");
     }
   };
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleAudioTimeUpdate = useCallback((currentTime: number, _duration: number) => {
+    setCurrentAudioTime(currentTime);
+  }, []);
 
   if (loadingText) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="text-lg font-medium">Loading text...</p>
+          <p className="text-lg font-medium">Loading content...</p>
         </div>
       </div>
     );
@@ -194,8 +473,8 @@ function TextViewer({
 
   return (
     <div className="space-y-6">
-      {/* Audio Player for Related Audio File */}
-      {relatedAudioFile && (
+      {/* Audio Player Section (if available) */}
+      {audioFileData && (
         <Card className="border-2 border-emerald-200 dark:border-emerald-800">
           <CardHeader>
             <CardTitle className="flex items-center gap-3">
@@ -210,19 +489,24 @@ function TextViewer({
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground font-normal">
-                  {relatedAudioFile.filename}
+                  {audioFileData.filename}
                 </p>
               </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <AudioPlayerComponent fileId={relatedAudioFile.id} fileData={relatedAudioFile} compact={true} />
+            <AudioPlayer
+              audioFileId={audioFileData.id}
+              onTimeUpdate={handleAudioTimeUpdate}
+              onBookmark={() => setAudioBookmarkDialogOpen(true)}
+            />
           </CardContent>
         </Card>
       )}
 
-      {/* Main Text Content */}
+      {/* Main Content Area */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Text Content */}
         <div className="lg:col-span-2 space-y-6">
           <Card className="border-2">
             <CardHeader>
@@ -238,8 +522,8 @@ function TextViewer({
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground font-normal">
-                    {fileData.file_size
-                      ? Math.round((fileData.file_size / 1024) * 100) / 100
+                    {textFileData.file_size
+                      ? Math.round((textFileData.file_size / 1024) * 100) / 100
                       : 0}{" "}
                     KB
                   </p>
@@ -324,402 +608,26 @@ function TextViewer({
         </div>
       </div>
 
-      {/* Bookmark Dialog */}
+      {/* Bookmark Dialogs */}
       <BookmarkDialog
         open={bookmarkDialogOpen}
         onOpenChange={setBookmarkDialogOpen}
-        onSave={handleAddBookmark}
+        onSave={handleAddTextBookmark}
         selectedText={selectedText}
         position={selectionPosition !== null ? `Character ${selectionPosition}` : undefined}
       />
-    </div>
-  );
-}
 
-// Compact Audio Player Component
-function AudioPlayerComponent({
-  fileId,
-  fileData,
-  compact = false,
-}: {
-  fileId: string;
-  fileData: FileWithProgressData;
-  compact?: boolean;
-}) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  const { updateProgress, updateProgressImmediate } = useFileProgress();
-  const { createAudioBookmark } = useBookmarks(fileId);
-  const [bookmarkDialogOpen, setBookmarkDialogOpen] = useState(false);
-
-  const saveProgress = useCallback(
-    async (currentTime: number, immediate = false) => {
-      try {
-        if (!duration || duration === 0) return;
-
-        const progressPercentage = (currentTime / duration) * 100;
-
-        if (immediate) {
-          await updateProgressImmediate(
-            fileId,
-            progressPercentage,
-            currentTime.toString()
-          );
-        } else {
-          await updateProgress(
-            fileId,
-            progressPercentage,
-            currentTime.toString()
-          );
-        }
-      } catch (error) {
-        console.error("Error saving progress:", error);
-      }
-    },
-    [fileId, duration, updateProgress, updateProgressImmediate]
-  );
-
-  const handleAddAudioBookmark = async (title: string, note?: string) => {
-    await createAudioBookmark(fileId, title, currentTime, note);
-  };
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const handleLoadedMetadata = () => {
-      setDuration(audio.duration);
-      setLoading(false);
-
-      if (fileData.progress?.last_position) {
-        const lastTime = parseFloat(fileData.progress.last_position);
-        if (lastTime > 0 && lastTime < audio.duration) {
-          audio.currentTime = lastTime;
-          setCurrentTime(lastTime);
-        }
-      }
-    };
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
-
-      if (Math.floor(audio.currentTime) % 10 === 0) {
-        saveProgress(audio.currentTime, false);
-      }
-    };
-
-    const handleEnded = () => {
-      setIsPlaying(false);
-      saveProgress(audio.duration, true);
-    };
-
-    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audio.addEventListener("timeupdate", handleTimeUpdate);
-    audio.addEventListener("ended", handleEnded);
-
-    return () => {
-      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("ended", handleEnded);
-    };
-  }, [fileData.progress, saveProgress]);
-
-  const togglePlayPause = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (isPlaying) {
-      audio.pause();
-    } else {
-      audio.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
-
-  const seek = (time: number) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    audio.currentTime = time;
-    setCurrentTime(time);
-    saveProgress(time, true);
-  };
-
-  const skip = (seconds: number) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
-    seek(newTime);
-  };
-
-  const toggleMute = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (isMuted) {
-      audio.volume = volume;
-      setIsMuted(false);
-    } else {
-      audio.volume = 0;
-      setIsMuted(true);
-    }
-  };
-
-  const handleVolumeChange = (newVolume: number) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    setVolume(newVolume);
-    audio.volume = newVolume;
-    setIsMuted(newVolume === 0);
-  };
-
-  const formatTime = (time: number) => {
-    const hours = Math.floor(time / 3600);
-    const minutes = Math.floor((time % 3600) / 60);
-    const seconds = Math.floor(time % 60);
-
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
-        .toString()
-        .padStart(2, "0")}`;
-    }
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-  };
-
-  const getVolumeIcon = () => {
-    if (isMuted || volume === 0) return <VolumeX className="h-4 w-4" />;
-    if (volume < 0.5) return <Volume1 className="h-4 w-4" />;
-    return <Volume2 className="h-4 w-4" />;
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[100px]">
-        <div className="text-center space-y-2">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
-          <p className="text-sm text-muted-foreground">Loading audio...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <audio ref={audioRef} src={`/api/files/${fileId}`} preload="metadata" />
-
-      {/* Progress Section */}
-      <div className="space-y-3">
-        <div className="flex justify-between items-center text-sm">
-          <span className="flex items-center gap-2 text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            {formatTime(currentTime)}
-          </span>
-          <span className="text-muted-foreground">
-            {formatTime(duration)}
-          </span>
-        </div>
-
-        {/* Seek Bar */}
-        <div
-          className="w-full bg-secondary rounded-full h-3 cursor-pointer hover:h-4 transition-all group"
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const percentage = x / rect.width;
-            seek(percentage * duration);
-          }}
-        >
-          <div
-            className="bg-primary h-full rounded-full transition-all duration-300 relative group-hover:bg-primary/90"
-            style={{ width: `${(currentTime / duration) * 100}%` }}
-          >
-            <div className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Progress</span>
-          <span className="font-medium">
-            {Math.round((currentTime / duration) * 100)}%
-          </span>
-        </div>
-      </div>
-
-      {/* Controls */}
-      <div className="flex items-center justify-center gap-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => skip(-10)}
-          className="gap-2"
-        >
-          <SkipBack className="h-4 w-4" />
-          10s
-        </Button>
-
-        <Button
-          size="lg"
-          onClick={togglePlayPause}
-          className="h-12 w-12 rounded-full p-0"
-        >
-          {isPlaying ? (
-            <Pause className="h-6 w-6" />
-          ) : (
-            <Play className="h-6 w-6 ml-1" />
-          )}
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => skip(10)}
-          className="gap-2"
-        >
-          10s
-          <SkipForward className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {!compact && (
-        <>
-          {/* Bookmark Button */}
-          <div className="flex justify-center">
-            <Button
-              variant="outline"
-              onClick={() => setBookmarkDialogOpen(true)}
-              className="gap-2"
-            >
-              <BookmarkIcon className="h-4 w-4" />
-              Bookmark Current Position
-            </Button>
-          </div>
-
-          {/* Volume Control */}
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleMute}
-              className="flex-shrink-0"
-            >
-              {getVolumeIcon()}
-            </Button>
-            <div
-              className="flex-1 bg-secondary rounded-full h-2 cursor-pointer"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const percentage = x / rect.width;
-                handleVolumeChange(percentage);
-              }}
-            >
-              <div
-                className="bg-primary h-full rounded-full transition-all"
-                style={{ width: `${isMuted ? 0 : volume * 100}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground w-8 text-right">
-              {Math.round((isMuted ? 0 : volume) * 100)}%
-            </span>
-          </div>
-        </>
-      )}
-
-      {/* Audio Bookmark Dialog */}
       <BookmarkDialog
-        open={bookmarkDialogOpen}
-        onOpenChange={setBookmarkDialogOpen}
+        open={audioBookmarkDialogOpen}
+        onOpenChange={setAudioBookmarkDialogOpen}
         onSave={handleAddAudioBookmark}
-        position={`${formatTime(currentTime)}`}
+        position={`${Math.floor(currentAudioTime / 60)}:${Math.floor(currentAudioTime % 60).toString().padStart(2, '0')}`}
       />
     </div>
   );
 }
 
-// Main Audio Player Component (for standalone audio files)
-function AudioPlayer({
-  fileId,
-  fileData,
-}: {
-  fileId: string;
-  fileData: FileWithProgressData;
-}) {
-  const handleBookmarkNavigation = useCallback((bookmark: Bookmark) => {
-    // Additional handling for standalone audio player if needed
-    console.log('Navigating to bookmark:', bookmark);
-  }, []);
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Main Audio Player */}
-      <div className="lg:col-span-2 space-y-6">
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
-                <Headphones className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  Audio Player
-                  <Badge variant="default" className="bg-emerald-600">
-                    Audio
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground font-normal">
-                  {fileData.file_size
-                    ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
-                    : 0}{" "}
-                  MB
-                </p>
-              </div>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-6">
-            <AudioPlayerComponent 
-              fileId={fileId} 
-              fileData={fileData} 
-              compact={false} 
-            />
-
-            {/* Saved Progress Info */}
-            {fileData.progress && fileData.progress.progress_percentage > 0 && (
-              <div className="bg-muted/50 rounded-lg p-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-muted-foreground">
-                    <BarChart3 className="h-4 w-4" />
-                    Last saved progress
-                  </span>
-                  <span className="font-medium">
-                    {Math.round(fileData.progress.progress_percentage)}%
-                  </span>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Bookmarks Sidebar */}
-      <div className="space-y-6">
-        <BookmarkList 
-          fileId={fileId} 
-          onNavigateToBookmark={handleBookmarkNavigation}
-        />
-      </div>
-    </div>
-  );
-}
-
+// Main File Viewer Component
 export function FileViewer({ fileId }: { fileId: string }) {
   const [fileData, setFileData] = useState<FileWithProgressData | null>(null);
   const [relatedAudioFile, setRelatedAudioFile] = useState<FileWithProgressData | undefined>(undefined);
@@ -837,8 +745,6 @@ export function FileViewer({ fileId }: { fileId: string }) {
             };
 
             setRelatedAudioFile(formattedAudioFile);
-          } else {
-            setRelatedAudioFile(undefined);
           }
         }
       } catch (error) {
@@ -870,7 +776,7 @@ export function FileViewer({ fileId }: { fileId: string }) {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Error downloading file:", error);
-      alert("Failed to download file");
+      toast.error("Failed to download file");
     }
   };
 
@@ -933,14 +839,18 @@ export function FileViewer({ fileId }: { fileId: string }) {
             <Download className="h-4 w-4" />
             Download
           </Button>
-          {fileData.text_content && !relatedAudioFile && (
+          {isText && !relatedAudioFile && (
             <Button 
               variant="outline" 
               onClick={handleConvertToAudio} 
               disabled={isTtsLoading}
               className="gap-2"
             >
-              <Volume2 className="h-4 w-4" />
+              {isTtsLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Volume2 className="h-4 w-4" />
+              )}
               Convert to Audio
             </Button>
           )}
@@ -969,9 +879,63 @@ export function FileViewer({ fileId }: { fileId: string }) {
         </div>
       </div>
 
-      {/* File Viewer */}
-      {isAudio && <AudioPlayer fileId={fileId} fileData={fileData} />}
-      {isText && <TextViewer fileId={fileId} fileData={fileData} relatedAudioFile={relatedAudioFile} />}
+      {/* File Content */}
+      {isAudio ? (
+        // Standalone Audio Player for audio-only files
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <Card className="border-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
+                    <Headphones className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      Audio Player
+                      <Badge variant="default" className="bg-emerald-600">
+                        Audio
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground font-normal">
+                      {fileData.file_size
+                        ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
+                        : 0}{" "}
+                      MB
+                    </p>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AudioPlayer audioFileId={fileId} />
+              </CardContent>
+            </Card>
+          </div>
+          <div>
+            <BookmarkList fileId={fileId} />
+          </div>
+        </div>
+      ) : isText ? (
+        // Text with optional audio
+        <TextWithAudioViewer
+          fileId={fileId}
+          textFileData={fileData}
+          audioFileData={relatedAudioFile}
+        />
+      ) : (
+        // Fallback for other file types
+        <Card className="border-2">
+          <CardContent className="pt-12 pb-12 text-center space-y-6">
+            <div className="w-20 h-20 rounded-full bg-muted/20 flex items-center justify-center mx-auto">
+              <FileText className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <h3 className="text-xl font-semibold">Preview not available</h3>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              This file type cannot be previewed in the browser. You can download it to view it locally.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
