@@ -21,7 +21,14 @@ export interface TTSError {
   code?: string;
 }
 
-export function useTTS() {
+export interface TTSOptions {
+  fetchUsage?: boolean; // Option to control usage fetching
+  fetchVoices?: boolean; // Option to control voice fetching
+}
+
+export function useTTS(options: TTSOptions = {}) {
+  const { fetchUsage = false, fetchVoices = true } = options;
+  
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [voices, setVoices] = useState<VoiceOption[]>([]);
@@ -43,7 +50,7 @@ export function useTTS() {
   }, []);
 
   // Fetch available voices
-  const fetchVoices = useCallback(async (languageCode?: string) => {
+  const fetchAvailableVoices = useCallback(async (languageCode?: string) => {
     try {
       setError(null);
       const params = languageCode ? `?lang=${languageCode}` : '';
@@ -69,8 +76,10 @@ export function useTTS() {
     }
   }, [selectedVoice]);
 
-  // Fetch current month usage
+  // Fetch current month usage (only when needed)
   const fetchCurrentUsage = useCallback(async () => {
+    if (!fetchUsage) return; // Skip if usage fetching is disabled
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -85,10 +94,11 @@ export function useTTS() {
       }
     } catch (err) {
       console.error('Error fetching usage:', err);
+      // Don't set error state for usage fetching to avoid disrupting the main functionality
     }
-  }, [supabase]);
+  }, [supabase, fetchUsage]);
 
-  // Convert text to speech
+  // Convert text to speech and save to library
   const convertToSpeech = useCallback(async (
     text: string, 
     options?: { 
@@ -100,17 +110,6 @@ export function useTTS() {
     try {
       setIsLoading(true);
       setError(null);
-
-      // Clean up previous audio
-      if (currentAudioUrl.current) {
-        URL.revokeObjectURL(currentAudioUrl.current);
-        currentAudioUrl.current = null;
-      }
-
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-      }
 
       const response = await fetch('/api/tts', {
         method: 'POST',
@@ -129,43 +128,65 @@ export function useTTS() {
         throw new Error(errorData.error || 'TTS conversion failed');
       }
 
-      // Get usage info from headers
-      const characterCount = response.headers.get('X-Character-Count');
-      const costCents = response.headers.get('X-Cost-Cents');
+      // Parse the JSON response (no longer a blob)
+      const result = await response.json();
 
-      // Create audio blob and URL
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      currentAudioUrl.current = audioUrl;
-
-      // Create or update audio element
-      if (!audioRef.current) {
-        audioRef.current = new Audio();
+      if (!result.success) {
+        throw new Error(result.error || 'TTS conversion failed');
       }
 
-      audioRef.current.src = audioUrl;
+      // If autoPlay is enabled, fetch and play the audio file
+      if (options?.autoPlay !== false && result.audioFile?.id) {
+        try {
+          // Clean up previous audio
+          if (currentAudioUrl.current) {
+            URL.revokeObjectURL(currentAudioUrl.current);
+            currentAudioUrl.current = null;
+          }
 
-      // Set up audio event listeners
-      audioRef.current.onplay = () => setIsPlaying(true);
-      audioRef.current.onpause = () => setIsPlaying(false);
-      audioRef.current.onended = () => setIsPlaying(false);
-      audioRef.current.onerror = () => {
-        setError({ message: 'Audio playback error' });
-        setIsPlaying(false);
-      };
+          // Fetch the audio file for playback
+          const audioResponse = await fetch(`/api/files/${result.audioFile.id}`);
+          if (audioResponse.ok) {
+            const audioBlob = await audioResponse.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            currentAudioUrl.current = audioUrl;
 
-      // Auto-play if requested
-      if (options?.autoPlay !== false) {
-        await audioRef.current.play();
+            // Create or update audio element
+            if (!audioRef.current) {
+              audioRef.current = new Audio();
+            }
+
+            audioRef.current.src = audioUrl;
+
+            // Set up audio event listeners
+            audioRef.current.onplay = () => setIsPlaying(true);
+            audioRef.current.onpause = () => setIsPlaying(false);
+            audioRef.current.onended = () => setIsPlaying(false);
+            audioRef.current.onerror = () => {
+              setError({ message: 'Audio playback error' });
+              setIsPlaying(false);
+            };
+
+            // Auto-play
+            await audioRef.current.play();
+          }
+        } catch (playbackError) {
+          console.warn('Audio file created but playback failed:', playbackError);
+          // Don't fail the entire conversion if only playback fails
+        }
       }
 
-      // Update usage
-      await fetchCurrentUsage();
+      // Update usage only if usage tracking is enabled
+      if (fetchUsage) {
+        await fetchCurrentUsage();
+      }
 
       return {
-        audioUrl,
-        characterCount: characterCount ? parseInt(characterCount) : 0,
-        costCents: costCents ? parseInt(costCents) : 0,
+        audioFileId: result.audioFile?.id,
+        audioFilename: result.audioFile?.filename,
+        characterCount: result.characterCount || 0,
+        costCents: result.costCents || 0,
+        message: result.message,
       };
 
     } catch (err) {
@@ -177,7 +198,7 @@ export function useTTS() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedVoice, fetchCurrentUsage]);
+  }, [selectedVoice, fetchCurrentUsage, fetchUsage]);
 
   // Play/pause audio
   const togglePlayback = useCallback(async () => {
@@ -209,11 +230,15 @@ export function useTTS() {
     setError(null);
   }, []);
 
-  // Initialize voices on mount
+  // Initialize on mount
   useEffect(() => {
-    fetchVoices();
-    fetchCurrentUsage();
-  }, [fetchVoices, fetchCurrentUsage]);
+    if (fetchVoices) {
+      fetchAvailableVoices();
+    }
+    if (fetchUsage) {
+      fetchCurrentUsage();
+    }
+  }, [fetchAvailableVoices, fetchCurrentUsage, fetchVoices, fetchUsage]);
 
   return {
     // State
@@ -228,7 +253,7 @@ export function useTTS() {
     convertToSpeech,
     togglePlayback,
     stopPlayback,
-    fetchVoices,
+    fetchVoices: fetchAvailableVoices,
     fetchCurrentUsage,
     setSelectedVoice,
     clearError,

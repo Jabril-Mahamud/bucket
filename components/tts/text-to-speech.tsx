@@ -5,25 +5,25 @@ import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Volume2,  
-  Play, 
-  Pause, 
-  Square, 
-  Loader2, 
+import {
+  Volume2,
+  Play,
+  Pause,
+  Square,
+  Loader2,
   DollarSign,
   BarChart3,
-  AlertCircle
+  AlertCircle,
 } from "lucide-react";
 import { useTTS } from "@/hooks/useTTS";
 import { toast } from "sonner";
@@ -34,10 +34,14 @@ interface TextToSpeechProps {
   className?: string;
 }
 
-export function TextToSpeech({ initialText = "", fileId, className }: TextToSpeechProps) {
+export function TextToSpeech({
+  initialText = "",
+  fileId,
+  className,
+}: TextToSpeechProps) {
   const [text, setText] = useState(initialText);
   const [selectedText, setSelectedText] = useState("");
-  
+
   const {
     isLoading,
     isPlaying,
@@ -50,38 +54,46 @@ export function TextToSpeech({ initialText = "", fileId, className }: TextToSpee
     stopPlayback,
     setSelectedVoice,
     clearError,
-  } = useTTS();
+  } = useTTS({
+    fetchUsage: true, // Enable usage tracking for TTS component
+    fetchVoices: true, // Enable voice fetching for TTS component
+  });
 
-  const handleConvert = useCallback(async (textToConvert?: string) => {
-    const targetText = textToConvert || selectedText || text;
-    
-    if (!targetText.trim()) {
-      toast.error("Please enter or select some text to convert");
-      return;
-    }
+  const handleConvert = useCallback(
+    async (textToConvert?: string) => {
+      const targetText = textToConvert || selectedText || text;
 
-    if (targetText.length > 3000) {
-      toast.error("Text is too long. Maximum 3000 characters allowed.");
-      return;
-    }
+      if (!targetText.trim()) {
+        toast.error("Please enter or select some text to convert");
+        return;
+      }
 
-    try {
-      const result = await convertToSpeech(targetText, {
-        voiceId: selectedVoice,
-        fileId,
-        autoPlay: true,
-      });
+      if (targetText.length > 3000) {
+        toast.error("Text is too long. Maximum 3000 characters allowed.");
+        return;
+      }
 
-      toast.success(
-        `Converted ${result.characterCount} characters (${(result.costCents / 100).toFixed(4)}¢)`
-      );
-      
-      // Clear selected text after conversion
-      setSelectedText("");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Conversion failed");
-    }
-  }, [text, selectedText, selectedVoice, fileId, convertToSpeech]);
+      try {
+        const result = await convertToSpeech(targetText, {
+          voiceId: selectedVoice,
+          fileId,
+          autoPlay: true,
+        });
+
+        toast.success(
+          `Converted ${result.characterCount} characters (${(
+            result.costCents / 100
+          ).toFixed(4)}¢)`
+        );
+
+        // Clear selected text after conversion
+        setSelectedText("");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Conversion failed");
+      }
+    },
+    [text, selectedText, selectedVoice, fileId, convertToSpeech]
+  );
 
   const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
@@ -206,10 +218,10 @@ export function TextToSpeech({ initialText = "", fileId, className }: TextToSpee
               </Button>
             </>
           ) : (
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={togglePlayback}
-              disabled={!isPlaying && !document.querySelector('audio')}
+              disabled={!isPlaying && !document.querySelector("audio")}
             >
               <Play className="h-4 w-4" />
             </Button>
@@ -223,7 +235,7 @@ export function TextToSpeech({ initialText = "", fileId, className }: TextToSpee
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Monthly Usage</span>
             </div>
-            
+
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Characters</span>

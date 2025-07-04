@@ -2,6 +2,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { PollyService } from "@/lib/polly";
 import { NextRequest, NextResponse } from "next/server";
+import { TablesInsert } from "@/lib/supabase/database.types";
 
 interface TTSRequestBody {
   text: string;
@@ -68,6 +69,69 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
+    // Get original file info if fileId is provided
+    let originalFile = null;
+    if (fileId) {
+      const { data: fileData } = await supabase
+        .from('files')
+        .select('filename, title, author')
+        .eq('id', fileId)
+        .eq('user_id', user.id)
+        .single();
+      
+      originalFile = fileData;
+    }
+
+    // Generate a clean, readable filename for the audio file
+    const baseFilename = originalFile?.filename || 'converted-text';
+    const cleanBaseName = baseFilename.replace(/\.[^/.]+$/, ''); // Remove extension
+    const audioFilename = `${cleanBaseName} (Audio).mp3`;
+    const audioFilePath = `${user.id}/${audioFilename}`;
+
+    // Save audio file to Supabase Storage
+    const { data: storageData, error: storageError } = await supabase.storage
+      .from('user-files')
+      .upload(audioFilePath, ttsResult.audioStream!, {
+        contentType: 'audio/mpeg',
+        upsert: false
+      });
+
+    if (storageError) {
+      console.error('Storage error:', storageError);
+      return NextResponse.json({ 
+        error: `Failed to save audio file: ${storageError.message}` 
+      }, { status: 500 });
+    }
+
+    // Create file entry in database with clean title
+    const audioFileInsert: TablesInsert<"files"> = {
+      user_id: user.id,
+      filename: audioFilename,
+      file_path: storageData.path,
+      file_type: 'audio/mpeg',
+      file_size: ttsResult.audioStream!.length,
+      title: originalFile?.title ? `${originalFile.title} (Audio)` : `${cleanBaseName} (Audio)`,
+      author: originalFile?.author || null,
+    };
+
+    const { data: audioFileData, error: dbError } = await supabase
+      .from('files')
+      .insert(audioFileInsert)
+      .select()
+      .single();
+
+    if (dbError) {
+      console.error('Database error:', dbError);
+      // Clean up storage if database insert fails
+      await supabase.storage
+        .from('user-files')
+        .remove([storageData.path]);
+        
+      return NextResponse.json({ 
+        error: `Database error: ${dbError.message}` 
+      }, { status: 500 });
+    }
+
     // Track usage in database
     const { error: usageError } = await supabase
       .from('tts_usage')
@@ -78,6 +142,7 @@ export async function POST(request: NextRequest) {
         character_count: ttsResult.characterCount,
         voice_id: voiceId,
         cost_cents: ttsResult.costCents,
+        audio_url: audioFileData.file_path, // Store the file path
       });
 
     if (usageError) {
@@ -85,15 +150,17 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if usage tracking fails
     }
 
-    // Return the audio data
-    return new NextResponse(ttsResult.audioStream, {
-      headers: {
-        'Content-Type': 'audio/mpeg',
-        'Content-Length': ttsResult.audioStream!.length.toString(),
-        'Cache-Control': 'public, max-age=31536000', // Cache for 1 year
-        'X-Character-Count': ttsResult.characterCount.toString(),
-        'X-Cost-Cents': ttsResult.costCents.toString(),
+    // Return success with file info
+    return NextResponse.json({
+      success: true,
+      message: 'Audio conversion completed and saved to library',
+      audioFile: {
+        id: audioFileData.id,
+        filename: audioFileData.filename,
+        fileSize: audioFileData.file_size,
       },
+      characterCount: ttsResult.characterCount,
+      costCents: ttsResult.costCents,
     });
 
   } catch (error) {
@@ -104,7 +171,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET endpoint to fetch available voices
+// GET endpoint to fetch available voices (unchanged)
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();

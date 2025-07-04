@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, BookOpen, Library } from "lucide-react";
+import { BookOpen, Library } from "lucide-react";
 import { AuthButton } from "./auth-button";
 import { Button } from "./ui/button";
 
@@ -9,8 +9,8 @@ export function Header() {
       <div className="container mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo and Brand */}
         <div className="flex items-center gap-6">
-          <Link 
-            href="/" 
+          <Link
+            href="/"
             className="flex items-center gap-2 hover:opacity-80 transition-opacity group"
           >
             <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center group-hover:bg-primary/90 transition-colors">
@@ -29,12 +29,6 @@ export function Header() {
                 Library
               </Link>
             </Button>
-             <Button asChild variant="ghost" size="sm" className="h-8 px-3">
-              <Link href="/library/usage" className="gap-1.5 text-sm font-medium">
-                <BarChart3 className="h-3.5 w-3.5" />
-                Usage
-              </Link>
-            </Button>
           </nav>
         </div>
 
@@ -49,7 +43,7 @@ export function Header() {
               </Link>
             </Button>
           </div>
-          
+
           <AuthButton />
         </div>
       </div>

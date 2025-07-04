@@ -52,11 +52,37 @@ export function LibraryPage() {
   const [showUpload, setShowUpload] = useState(false);
   
   const supabase = createClient();
-  const { convertToSpeech, isLoading: isTtsLoading } = useTTS();
+  const { convertToSpeech, isLoading: isTtsLoading } = useTTS({
+    fetchUsage: false, // Don't fetch usage on library page
+    fetchVoices: false // Don't need voices list on library page
+  });
 
   const handleConvertToAudio = async (file: LibraryFile) => {
-    if (!file.text_content) {
-      toast.error("No text content available to convert to audio.");
+    let textToConvert = file.text_content;
+
+    // If no text content is stored, try to fetch it directly for text files
+    if (!textToConvert && file.file_type === 'text/plain') {
+      const toastId = toast.loading("Reading text file...", {
+        description: `File: ${file.filename}`,
+      });
+
+      try {
+        const response = await fetch(`/api/files/${file.id}`);
+        if (response.ok) {
+          textToConvert = await response.text();
+        }
+        toast.dismiss(toastId);
+      } catch (error) {
+        console.error("Error reading text file:", error);
+        toast.error("Failed to read text file", { id: toastId });
+        return;
+      }
+    }
+
+    if (!textToConvert || textToConvert.trim().length === 0) {
+      toast.error("No text content available to convert to audio.", {
+        description: "Try uploading a text file (.txt) or PDF with extracted text content."
+      });
       return;
     }
 
@@ -65,13 +91,15 @@ export function LibraryPage() {
     });
 
     try {
-      await convertToSpeech(file.text_content, { fileId: file.id, autoPlay: false });
-      toast.success("Conversion complete!", {
+      const result = await convertToSpeech(textToConvert, { fileId: file.id, autoPlay: false });
+      toast.success("Audio file created and saved to library!", {
         id: toastId,
-        description: "The new audio file will now be available in your library.",
+        description: `${result.audioFilename} - ${result.characterCount} characters converted`,
       });
       // Refresh the file list to show the new audio file
-      fetchFiles();
+      setTimeout(() => {
+        fetchFiles();
+      }, 1000); // Small delay to ensure database has processed the new file
     } catch (error) {
       console.error("TTS conversion error:", error);
       toast.error("Audio conversion failed", {
@@ -265,6 +293,27 @@ export function LibraryPage() {
       console.error('Error downloading file:', error);
       alert('Failed to download file');
     }
+  };
+
+  // Function to check if file can be converted to audio
+  const canConvertToAudio = (file: LibraryFile) => {
+    // Can convert if it has text content OR is a text file
+    return !!(file.text_content || file.file_type === 'text/plain' || file.file_type === 'application/pdf');
+  };
+
+  // Helper functions for better button labels
+  const getOpenButtonText = (fileType: string) => {
+    if (fileType.startsWith('audio/')) return 'Listen';
+    if (fileType === 'application/pdf') return 'Read';
+    if (fileType.startsWith('text/') || fileType === 'application/epub+zip') return 'Read';
+    return 'Open';
+  };
+
+  const getOpenButtonIcon = (fileType: string) => {
+    if (fileType.startsWith('audio/')) return <Headphones className="h-3 w-3" />;
+    if (fileType === 'application/pdf') return <BookOpen className="h-3 w-3" />;
+    if (fileType.startsWith('text/') || fileType === 'application/epub+zip') return <BookOpen className="h-3 w-3" />;
+    return <Eye className="h-3 w-3" />;
   };
 
   if (loading) {
@@ -462,9 +511,12 @@ export function LibraryPage() {
                 </div>
 
                 {/* Show text content status if relevant */}
-                {file.file_type === 'application/pdf' && file.text_content && (
+                {canConvertToAudio(file) && (
                   <div className="text-xs text-muted-foreground">
-                    <span className="text-green-600">✓ Text content available ({file.text_content.split(/\s+/).filter(Boolean).length || 0} words)</span>
+                    <span className="text-green-600">✓ Can convert to audio</span>
+                    {file.text_content && (
+                      <span className="block">({file.text_content.split(/\s+/).filter(Boolean).length || 0} words)</span>
+                    )}
                   </div>
                 )}
 
@@ -472,12 +524,12 @@ export function LibraryPage() {
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   <Link href={`/library/view/${file.id}`} className="flex-1">
                     <Button size="sm" className="w-full gap-2 text-xs sm:text-sm">
-                      <Eye className="h-3 w-3" />
-                      Open
+                      {getOpenButtonIcon(file.file_type)}
+                      {getOpenButtonText(file.file_type)}
                     </Button>
                   </Link>
                   <div className="flex gap-2">
-                    {file.text_content && (
+                    {canConvertToAudio(file) && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -545,10 +597,13 @@ export function LibraryPage() {
                             </span>
                           </>
                         )}
-                        {file.text_content && (
+                        {canConvertToAudio(file) && (
                           <>
                             <span className="hidden sm:inline">•</span>
-                            <span className="text-green-600">✓ Text content available ({file.text_content.split(/\s+/).filter(Boolean).length || 0} words)</span>
+                            <span className="text-green-600">✓ Can convert to audio</span>
+                            {file.text_content && (
+                              <span>({file.text_content.split(/\s+/).filter(Boolean).length || 0} words)</span>
+                            )}
                           </>
                         )}
                       </div>
@@ -558,12 +613,12 @@ export function LibraryPage() {
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                     <Link href={`/library/view/${file.id}`} className="flex-1 sm:flex-none">
                       <Button size="sm" className="gap-2 w-full sm:w-auto">
-                        <Eye className="h-3 w-3" />
-                        Open
+                        {getOpenButtonIcon(file.file_type)}
+                        {getOpenButtonText(file.file_type)}
                       </Button>
                     </Link>
                     <div className="flex gap-2">
-                      {file.text_content && (
+                      {canConvertToAudio(file) && (
                         <Button
                           size="sm"
                           variant="outline"
