@@ -1,3 +1,4 @@
+// app/page.tsx
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,10 +54,10 @@ const features = [
 const supportedFormats = [
   { name: "PDF", icon: <FileText className="h-3.5 w-3.5" />, color: "text-red-500" },
   { name: "EPUB", icon: <BookOpen className="h-3.5 w-3.5" />, color: "text-indigo-500" },
+  { name: "DOC/DOCX", icon: <FileText className="h-3.5 w-3.5" />, color: "text-blue-500" },
+  { name: "TXT", icon: <FileText className="h-3.5 w-3.5" />, color: "text-slate-500" },
   { name: "MP3", icon: <Headphones className="h-3.5 w-3.5" />, color: "text-emerald-500" },
   { name: "WAV", icon: <Headphones className="h-3.5 w-3.5" />, color: "text-emerald-500" },
-  { name: "M4A", icon: <Headphones className="h-3.5 w-3.5" />, color: "text-emerald-500" },
-  { name: "TXT", icon: <FileText className="h-3.5 w-3.5" />, color: "text-slate-500" },
 ];
 
 const techStack = [

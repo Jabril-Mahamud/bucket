@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Library } from "lucide-react";
+import { BookOpen, Library, Settings } from "lucide-react";
 import { AuthButton } from "./auth-button";
 import { Button } from "./ui/button";
 
@@ -9,8 +9,8 @@ export function Header() {
       <div className="container mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo and Brand */}
         <div className="flex items-center gap-6">
-          <Link 
-            href="/" 
+          <Link
+            href="/"
             className="flex items-center gap-2 hover:opacity-80 transition-opacity group"
           >
             <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center group-hover:bg-primary/90 transition-colors">
@@ -22,11 +22,17 @@ export function Header() {
           </Link>
 
           {/* Navigation Links */}
-          <nav className="hidden md:flex items-center">
+          <nav className="hidden md:flex items-center gap-1">
             <Button asChild variant="ghost" size="sm" className="h-8 px-3">
               <Link href="/library" className="gap-1.5 text-sm font-medium">
                 <Library className="h-3.5 w-3.5" />
                 Library
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" size="sm" className="h-8 px-3">
+              <Link href="/protected" className="gap-1.5 text-sm font-medium">
+                <Settings className="h-3.5 w-3.5" />
+                Dashboard
               </Link>
             </Button>
           </nav>
@@ -34,16 +40,22 @@ export function Header() {
 
         {/* Right side - Auth (theme switcher now integrated into AuthButton) */}
         <div className="flex items-center gap-1">
-          {/* Mobile Library Link */}
-          <div className="md:hidden">
+          {/* Mobile Navigation Links */}
+          <div className="md:hidden flex items-center gap-1">
             <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
               <Link href="/library">
                 <Library className="h-4 w-4" />
                 <span className="sr-only">Library</span>
               </Link>
             </Button>
+            <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
+              <Link href="/protected">
+                <Settings className="h-4 w-4" />
+                <span className="sr-only">Dashboard</span>
+              </Link>
+            </Button>
           </div>
-          
+
           <AuthButton />
         </div>
       </div>

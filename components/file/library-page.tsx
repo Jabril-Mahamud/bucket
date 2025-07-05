@@ -1,3 +1,4 @@
+// components/file/library-page.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -100,7 +101,8 @@ export function LibraryPage() {
     // Apply search filter
     if (searchQuery.trim()) {
       filtered = filtered.filter(file =>
-        file.filename.toLowerCase().includes(searchQuery.toLowerCase())
+        file.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (file.text_content && file.text_content.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
 
@@ -232,6 +234,21 @@ export function LibraryPage() {
       console.error('Error downloading file:', error);
       alert('Failed to download file');
     }
+  };
+
+  // Helper functions for better button labels
+  const getOpenButtonText = (fileType: string) => {
+    if (fileType.startsWith('audio/')) return 'Listen';
+    if (fileType === 'application/pdf') return 'Read';
+    if (fileType.startsWith('text/') || fileType === 'application/epub+zip') return 'Read';
+    return 'Open';
+  };
+
+  const getOpenButtonIcon = (fileType: string) => {
+    if (fileType.startsWith('audio/')) return <Headphones className="h-3 w-3" />;
+    if (fileType === 'application/pdf') return <BookOpen className="h-3 w-3" />;
+    if (fileType.startsWith('text/') || fileType === 'application/epub+zip') return <BookOpen className="h-3 w-3" />;
+    return <Eye className="h-3 w-3" />;
   };
 
   if (loading) {
@@ -432,8 +449,8 @@ export function LibraryPage() {
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   <Link href={`/library/view/${file.id}`} className="flex-1">
                     <Button size="sm" className="w-full gap-2 text-xs sm:text-sm">
-                      <Eye className="h-3 w-3" />
-                      Open
+                      {getOpenButtonIcon(file.file_type)}
+                      {getOpenButtonText(file.file_type)}
                     </Button>
                   </Link>
                   <div className="flex gap-2">
@@ -484,7 +501,7 @@ export function LibraryPage() {
                         <span>{formatFileSize(file.file_size)}</span>
                         <span className="hidden sm:inline">•</span>
                         <span>{formatDate(file.uploaded_at)}</span>
-                        {file.file_type.startsWith('audio/') && file.progress && file.progress.progress_percentage > 0 && (
+                        {file.progress && file.progress.progress_percentage > 0 && (
                           <>
                             <span className="hidden sm:inline">•</span>
                             <span className="text-primary font-medium">
@@ -499,8 +516,8 @@ export function LibraryPage() {
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                     <Link href={`/library/view/${file.id}`} className="flex-1 sm:flex-none">
                       <Button size="sm" className="gap-2 w-full sm:w-auto">
-                        <Eye className="h-3 w-3" />
-                        Open
+                        {getOpenButtonIcon(file.file_type)}
+                        {getOpenButtonText(file.file_type)}
                       </Button>
                     </Link>
                     <div className="flex gap-2">

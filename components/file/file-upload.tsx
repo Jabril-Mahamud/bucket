@@ -1,309 +1,133 @@
+// components/file/file-upload.tsx
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Upload, 
-  File, 
-  CheckCircle2, 
-  XCircle, 
-  Loader2,
-  FileText,
-  Music,
-  BookOpen,
-  X,
-  RotateCcw
-} from "lucide-react";
-import { cn, UploadFile } from "@/lib/utils";
-import { TablesInsert } from "@/lib/supabase/database.types";
+import { UploadCloud, FileText, Headphones, XCircle } from "lucide-react";
+import { toast } from "sonner";
 
-export function FileUpload({ onUploadComplete }: { onUploadComplete?: () => void }) {
-  const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  
+interface FileUploadProps {
+  onUploadComplete: () => void;
+}
+
+export function FileUpload({ onUploadComplete }: FileUploadProps) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [fileName, setFileName] = useState("");
   const supabase = createClient();
 
-  const handleUploadFiles = useCallback(async (filesToUpload: UploadFile[]) => {
-    setIsUploading(true);
-    
-    for (const uploadFile of filesToUpload) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
-
-        // Create file path: user_id/filename
-        const filePath = `${user.id}/${uploadFile.file.name}`;
-        
-        // Upload to Supabase Storage
-        const { data: storageData, error: storageError } = await supabase.storage
-          .from('user-files')
-          .upload(filePath, uploadFile.file, {
-            upsert: false
-          });
-
-        if (storageError) throw storageError;
-
-        // Update progress
-        setUploadFiles(prev => prev.map(f => 
-          f.id === uploadFile.id 
-            ? { ...f, progress: 70 }
-            : f
-        ));
-
-        // Save metadata to database using typed insert
-        const fileInsert: TablesInsert<"files"> = {
-          user_id: user.id,
-          filename: uploadFile.file.name,
-          file_path: storageData.path,
-          file_type: uploadFile.file.type,
-          file_size: uploadFile.file.size
-        };
-
-        const { error: dbError } = await supabase
-          .from('files')
-          .insert(fileInsert);
-
-        if (dbError) throw dbError;
-
-        // Mark as complete
-        setUploadFiles(prev => prev.map(f => 
-          f.id === uploadFile.id 
-            ? { ...f, progress: 100, status: 'success' as const }
-            : f
-        ));
-
-      } catch (error) {
-        console.error('Upload error:', error);
-        setUploadFiles(prev => prev.map(f => 
-          f.id === uploadFile.id 
-            ? { 
-                ...f, 
-                status: 'error' as const, 
-                error: error instanceof Error ? error.message : 'Upload failed'
-              }
-            : f
-        ));
-      }
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (acceptedFiles.length === 0) {
+      toast.error("No file selected.");
+      return;
     }
-    
-    setIsUploading(false);
-    onUploadComplete?.();
-  }, [supabase, onUploadComplete]);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const newFiles: UploadFile[] = acceptedFiles.map(file => ({
-      file,
-      id: Math.random().toString(36).substring(7),
-      progress: 0,
-      status: 'uploading' as const
-    }));
-    
-    setUploadFiles(prev => [...prev, ...newFiles]);
-    handleUploadFiles(newFiles);
-  }, [handleUploadFiles]);
+    const file = acceptedFiles[0];
+    setFileName(file.name);
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("You must be logged in to upload files.");
+        setUploading(false);
+        return;
+      }
+
+      const filePath = `${user.id}/${Date.now()}-${file.name}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("user-files")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+          
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Insert file metadata into the database
+      const { error: dbError } = await supabase.from("files").insert({
+        user_id: user.id,
+        filename: file.name,
+        file_path: filePath,
+        file_size: file.size,
+        file_type: file.type,
+      });
+
+      if (dbError) throw dbError;
+
+      toast.success("File uploaded successfully!");
+      onUploadComplete();
+    } catch (error: unknown) {
+      console.error("Error uploading file:", error);
+      toast.error(`Upload failed: ${(error instanceof Error) ? error.message : "Unknown error"}`);
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+      setFileName("");
+    }
+  }, [onUploadComplete, supabase]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    multiple: false,
     accept: {
       'application/pdf': ['.pdf'],
       'text/plain': ['.txt'],
       'application/epub+zip': ['.epub'],
-      'audio/*': ['.mp3', '.wav', '.m4a', '.aac', '.ogg']
+      'audio/*': ['.mp3', '.wav', '.ogg', '.m4a'],
     },
-    multiple: true
   });
 
-  const clearCompleted = () => {
-    setUploadFiles(prev => prev.filter(f => f.status === 'uploading'));
-  };
-
-  const retryFailed = () => {
-    const failedFiles = uploadFiles.filter(f => f.status === 'error');
-    if (failedFiles.length > 0) {
-      setUploadFiles(prev => prev.map(f => 
-        f.status === 'error' 
-          ? { ...f, status: 'uploading' as const, progress: 0, error: undefined }
-          : f
-      ));
-      handleUploadFiles(failedFiles);
-    }
-  };
-
-  const removeFile = (id: string) => {
-    setUploadFiles(prev => prev.filter(f => f.id !== id));
-  };
-
-  const getFileIcon = (file: File) => {
-    if (file.type.startsWith('audio/')) 
-      return <Music className="h-5 w-5 text-emerald-500" />;
-    if (file.type === 'application/pdf') 
-      return <FileText className="h-5 w-5 text-red-500" />;
-    if (file.type === 'application/epub+zip') 
-      return <BookOpen className="h-5 w-5 text-indigo-500" />;
-    return <File className="h-5 w-5 text-slate-500" />;
-  };
-
   return (
-    <div className="space-y-6">
-      {/* Drop Zone */}
+    <div className="space-y-4">
       <div
         {...getRootProps()}
-        className={cn(
-          "relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200",
-          "hover:border-primary hover:bg-primary/5",
-          isDragActive 
-            ? "border-primary bg-primary/10 scale-105" 
-            : "border-muted-foreground/25"
-        )}
+        className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
       >
         <input {...getInputProps()} />
-        <div className="flex flex-col items-center gap-4">
-          <div className={cn(
-            "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200",
-            isDragActive ? "bg-primary/20 scale-110" : "bg-muted"
-          )}>
-            <Upload className={cn(
-              "h-8 w-8 transition-colors duration-200",
-              isDragActive ? "text-primary" : "text-muted-foreground"
-            )} />
+        {uploading ? (
+          <div className="flex flex-col items-center space-y-3">
+            <UploadCloud className="h-10 w-10 text-primary animate-bounce" />
+            <p className="text-lg font-medium">Uploading {fileName}...</p>
+            <Progress value={uploadProgress} className="w-full max-w-md" />
+            <p className="text-sm text-muted-foreground">{Math.round(uploadProgress)}%</p>
           </div>
-          
-          {isDragActive ? (
-            <div className="space-y-2">
-              <p className="text-lg font-medium text-primary">Drop your files here</p>
-              <p className="text-sm text-muted-foreground">
-                Release to upload
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <p className="text-lg font-medium mb-1">
-                  Drag & drop files here
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  or click to browse your files
-                </p>
-              </div>
-              
-              <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
-                <span className="px-2 py-1 bg-muted rounded">PDF</span>
-                <span className="px-2 py-1 bg-muted rounded">EPUB</span>
-                <span className="px-2 py-1 bg-muted rounded">TXT</span>
-                <span className="px-2 py-1 bg-muted rounded">MP3</span>
-                <span className="px-2 py-1 bg-muted rounded">WAV</span>
-                <span className="px-2 py-1 bg-muted rounded">M4A</span>
-              </div>
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="flex flex-col items-center space-y-3">
+            <UploadCloud className="h-10 w-10 text-muted-foreground" />
+            {isDragActive ? (
+              <p className="text-lg font-medium">Drop the files here ...</p>
+            ) : (
+              <p className="text-lg font-medium">Drag & drop a file here, or click to select one</p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              PDF, TXT, EPUB, MP3, WAV, OGG, M4A files are supported.
+            </p>
+            <Button variant="outline" className="mt-4">
+              Select File
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* Upload Progress */}
-      {uploadFiles.length > 0 && (
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Loader2 className={cn("h-5 w-5", isUploading ? "animate-spin" : "hidden")} />
-                Upload Progress
-                <span className="text-sm font-normal text-muted-foreground">
-                  ({uploadFiles.filter(f => f.status === 'success').length}/{uploadFiles.length} completed)
-                </span>
-              </CardTitle>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={clearCompleted}
-                  disabled={isUploading}
-                  className="gap-2"
-                >
-                  <X className="h-3 w-3" />
-                  Clear Completed
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={retryFailed}
-                  disabled={isUploading || !uploadFiles.some(f => f.status === 'error')}
-                  className="gap-2"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Retry Failed
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          
-          <CardContent className="space-y-4">
-            {uploadFiles.map((uploadFile) => (
-              <div key={uploadFile.id} className="space-y-3">
-                <div className="flex items-center gap-3">
-                  {getFileIcon(uploadFile.file)}
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium truncate pr-2">
-                        {uploadFile.file.name}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {uploadFile.status === 'uploading' && (
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                        )}
-                        {uploadFile.status === 'success' && (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        )}
-                        {uploadFile.status === 'error' && (
-                          <XCircle className="h-4 w-4 text-red-500" />
-                        )}
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {Math.round(uploadFile.file.size / 1024 / 1024 * 100) / 100} MB
-                        </span>
-                        {uploadFile.status !== 'uploading' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeFile(uploadFile.id)}
-                            className="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {uploadFile.status === 'uploading' && (
-                      <div className="mt-2">
-                        <Progress value={uploadFile.progress} className="h-2" />
-                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                          <span>Uploading...</span>
-                          <span>{uploadFile.progress}%</span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {uploadFile.status === 'success' && (
-                      <p className="text-xs text-green-600 mt-1">
-                        ✓ Upload completed successfully
-                      </p>
-                    )}
-                    
-                    {uploadFile.error && (
-                      <p className="text-xs text-red-500 mt-1">
-                        ✗ {uploadFile.error}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+      {uploading && fileName && (
+        <div className="flex items-center justify-between p-3 border rounded-lg bg-muted">
+          <div className="flex items-center gap-3">
+            {fileName.endsWith(".pdf") && <FileText className="h-5 w-5 text-red-500" />}
+            {(fileName.endsWith(".txt") || fileName.endsWith(".epub")) && <FileText className="h-5 w-5 text-blue-500" />}
+            {(fileName.endsWith(".mp3") || fileName.endsWith(".wav") || fileName.endsWith(".ogg") || fileName.endsWith(".m4a")) && <Headphones className="h-5 w-5 text-emerald-500" />}
+            <span className="text-sm font-medium truncate">{fileName}</span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setUploading(false)}>
+            <XCircle className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </div>
       )}
     </div>
   );
