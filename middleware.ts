@@ -1,21 +1,20 @@
 import { updateSession } from "@/lib/supabase/middleware";
-import { type NextRequest, NextResponse } from "next/server";
-
-// Force Node.js runtime to handle @supabase/realtime-js
-export const runtime = 'nodejs';
+import { type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  try {
-    return await updateSession(request);
-  } catch (error) {
-    console.error('Middleware error:', error);
-    // Fallback to continue without auth middleware
-    return NextResponse.next();
-  }
+  return await updateSession(request);
 }
 
 export const config = {
   matcher: [
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
+     * Feel free to modify this pattern to include more paths.
+     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
-}
+};
