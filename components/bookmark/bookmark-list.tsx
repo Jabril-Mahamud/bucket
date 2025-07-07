@@ -1,9 +1,5 @@
-// components/bookmark/bookmark-list.tsx
-"use client";
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -13,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { BookmarkDialog } from "./bookmark-dialog";
-import { Bookmark, useBookmarks } from "@/hooks/useBookmarks";
+import { Bookmark, useBookmarks, CreateBookmarkData } from "@/hooks/useBookmarks";
 import {
   Bookmark as BookmarkIcon,
   MoreVertical,
@@ -24,219 +20,182 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronUp,
+  Loader2,
 } from "lucide-react";
 
 interface BookmarkListProps {
   fileId: string;
-  onNavigateToBookmark?: (bookmark: Bookmark) => void;
+  onNavigate?: (bookmark: Bookmark) => void;
 }
 
-export function BookmarkList({ fileId, onNavigateToBookmark }: BookmarkListProps) {
+export function BookmarkList({ fileId, onNavigate }: BookmarkListProps) {
   const { bookmarks, loading, deleteBookmark, updateBookmark } = useBookmarks(fileId);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const handleEditBookmark = async (title: string, note?: string) => {
+  const handleUpdateBookmark = async (bookmarkData: Omit<CreateBookmarkData, 'file_id'>) => {
     if (!editingBookmark) return;
-
-    const success = await updateBookmark(editingBookmark.id, {
-      title,
-      note,
-    });
-
-    if (success) {
-      setEditingBookmark(null);
-    }
+    await updateBookmark(editingBookmark.id, bookmarkData);
   };
 
-  const handleDeleteBookmark = async (bookmark: Bookmark) => {
-    if (confirm(`Are you sure you want to delete the bookmark "${bookmark.title}"?`)) {
-      await deleteBookmark(bookmark.id);
+  const handleDeleteBookmark = async (bookmarkId: string) => {
+    if (confirm('Are you sure you want to delete this bookmark?')) {
+      await deleteBookmark(bookmarkId);
     }
   };
 
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'Unknown date';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    if (!dateString) return "Unknown date";
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
   };
 
   const getPositionText = (bookmark: Bookmark) => {
     const { position_data } = bookmark;
-    if (position_data.type === 'text') {
-      if (position_data.paragraph !== undefined) {
-        return `Paragraph ${position_data.paragraph + 1}`;
-      }
-      if (position_data.character !== undefined) {
-        return `Character ${position_data.character}`;
-      }
-    } else if (position_data.type === 'audio' && position_data.timestamp !== undefined) {
-      const minutes = Math.floor(position_data.timestamp / 60);
-      const seconds = Math.floor(position_data.timestamp % 60);
-      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    if (position_data.type === "text") {
+      return `Par. ${position_data.paragraph! + 1}`;
     }
-    return 'Unknown position';
+    if (position_data.type === "audio") {
+      const minutes = Math.floor(position_data.timestamp! / 60);
+      const seconds = Math.floor(position_data.timestamp! % 60);
+      return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+    }
+    return "Unknown position";
   };
+
+  const displayedBookmarks = isExpanded ? bookmarks : bookmarks.slice(0, 5);
+  const hasMoreBookmarks = bookmarks.length > 5;
 
   if (loading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <BookmarkIcon className="h-5 w-5" />
-            Bookmarks
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-4">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
     );
   }
 
-  const displayedBookmarks = isExpanded ? bookmarks : bookmarks.slice(0, 3);
-  const hasMoreBookmarks = bookmarks.length > 3;
-
   return (
     <>
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="flex items-center justify-between text-lg">
-            <div className="flex items-center gap-2">
-              <BookmarkIcon className="h-5 w-5" />
-              Bookmarks
-              {bookmarks.length > 0 && (
-                <Badge variant="secondary" className="ml-2">
-                  {bookmarks.length}
-                </Badge>
-              )}
-            </div>
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent className="space-y-3">
-          {bookmarks.length === 0 ? (
-            <div className="text-center py-6 text-muted-foreground">
-              <BookmarkIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No bookmarks yet</p>
-              <p className="text-xs">Right-click on text to add a bookmark</p>
-            </div>
-          ) : (
-            <>
-              {displayedBookmarks.map((bookmark) => (
-                <div
-                  key={bookmark.id}
-                  className="group flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <BookmarkIcon className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                  
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-medium text-sm line-clamp-1" title={bookmark.title}>
-                        {bookmark.title}
-                      </h4>
-                      
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <MoreVertical className="h-3 w-3" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem 
-                            onClick={() => onNavigateToBookmark?.(bookmark)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <ArrowUpRight className="h-3 w-3" />
-                            Go to bookmark
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            onClick={() => setEditingBookmark(bookmark)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Edit3 className="h-3 w-3" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteBookmark(bookmark)}
-                            className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+      <div className="p-4 space-y-4">
+        {bookmarks.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <BookmarkIcon className="h-10 w-10 mx-auto mb-3 opacity-50" />
+            <h3 className="text-md font-semibold">No Bookmarks Yet</h3>
+            <p className="text-sm mt-1">
+              Create one from the audio player or by selecting text.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {displayedBookmarks.map((bookmark) => (
+              <div
+                key={bookmark.id}
+                className="group relative rounded-lg border p-3 transition-all hover:bg-muted/50 cursor-pointer"
+                onClick={() => onNavigate?.(bookmark)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <h4 className="font-semibold text-sm line-clamp-2" title={bookmark.title}>
+                      {bookmark.title}
+                    </h4>
 
                     {bookmark.note && (
-                      <div className="flex items-start gap-1 text-xs text-muted-foreground">
-                        <MessageSquare className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                        <p className="line-clamp-2">{bookmark.note}</p>
+                      <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <MessageSquare className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                        <p className="line-clamp-3">{bookmark.note}</p>
                       </div>
                     )}
 
                     {bookmark.position_data.text_preview && (
-                      <div className="text-xs text-muted-foreground italic line-clamp-1">
-                        *{bookmark.position_data.text_preview}*
-                      </div>
+                      <blockquote className="text-xs text-muted-foreground italic line-clamp-2 border-l-2 pl-2">
+                        {bookmark.position_data.text_preview}
+                      </blockquote>
                     )}
 
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{getPositionText(bookmark)}</span>
-                      <span>•</span>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {formatDate(bookmark.created_at)}
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
+                      <Badge variant="secondary" className="font-mono text-xs">
+                        {getPositionText(bookmark)}
+                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span>{formatDate(bookmark.created_at)}</span>
                       </div>
                     </div>
                   </div>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-2 right-2 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        onClick={(e) => e.stopPropagation()} // Prevent card click
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem
+                        onClick={(e) => { e.stopPropagation(); onNavigate?.(bookmark); }}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <ArrowUpRight className="h-4 w-4" />
+                        <span>Go to Bookmark</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={(e) => { e.stopPropagation(); setEditingBookmark(bookmark); }}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                        <span>Edit</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => { e.stopPropagation(); handleDeleteBookmark(bookmark.id); }}
+                        className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>Delete</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-              ))}
+              </div>
+            ))}
 
-              {hasMoreBookmarks && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className="w-full gap-2 text-muted-foreground hover:text-foreground"
-                >
-                  {isExpanded ? (
-                    <>
-                      <ChevronUp className="h-4 w-4" />
-                      Show fewer
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="h-4 w-4" />
-                      Show {bookmarks.length - 3} more
-                    </>
-                  )}
-                </Button>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+            {hasMoreBookmarks && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="w-full gap-2 text-muted-foreground hover:text-primary mt-2"
+              >
+                {isExpanded ? (
+                  <>
+                    <ChevronUp className="h-4 w-4" />
+                    Show Less
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4" />
+                    Show {bookmarks.length - 5} More
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
 
-      {/* Edit Bookmark Dialog */}
       {editingBookmark && (
         <BookmarkDialog
-          open={true}
+          open={!!editingBookmark}
           onOpenChange={(open) => !open && setEditingBookmark(null)}
-          onSave={handleEditBookmark}
+          onSave={handleUpdateBookmark}
           existingBookmark={editingBookmark}
-          mode="edit"
         />
       )}
     </>

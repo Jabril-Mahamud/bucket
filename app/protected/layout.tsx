@@ -24,7 +24,6 @@ export default function ProtectedLayout({
               Supabase
             </a>
           </p>
-          <ThemeSwitcher />
         </footer>
       </div>
     </main>

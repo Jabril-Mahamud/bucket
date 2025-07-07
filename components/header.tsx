@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { BookOpen, Library, Settings } from "lucide-react";
+import { BookOpen, Library } from "lucide-react";
 import { AuthButton } from "./auth-button";
 import { Button } from "./ui/button";
+import { ThemeSwitcher } from "./theme-switcher";
 
 export function Header() {
   return (
@@ -29,16 +30,10 @@ export function Header() {
                 Library
               </Link>
             </Button>
-            <Button asChild variant="ghost" size="sm" className="h-8 px-3">
-              <Link href="/protected" className="gap-1.5 text-sm font-medium">
-                <Settings className="h-3.5 w-3.5" />
-                Dashboard
-              </Link>
-            </Button>
+            
           </nav>
         </div>
 
-        {/* Right side - Auth (theme switcher now integrated into AuthButton) */}
         <div className="flex items-center gap-1">
           {/* Mobile Navigation Links */}
           <div className="md:hidden flex items-center gap-1">
@@ -48,15 +43,10 @@ export function Header() {
                 <span className="sr-only">Library</span>
               </Link>
             </Button>
-            <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
-              <Link href="/protected">
-                <Settings className="h-4 w-4" />
-                <span className="sr-only">Dashboard</span>
-              </Link>
-            </Button>
           </div>
 
           <AuthButton />
+          <ThemeSwitcher />
         </div>
       </div>
     </header>
