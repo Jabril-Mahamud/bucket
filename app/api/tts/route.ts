@@ -1,5 +1,3 @@
-export const runtime = 'nodejs';
-
 // app/api/tts/route.ts
 import { createClient } from "@/lib/supabase/server";
 import { PollyService } from "@/lib/polly";

@@ -1,4 +1,3 @@
-export const runtime = 'nodejs';
 
 // app/api/convert/route.ts
 import { createClient } from "@/lib/supabase/server";
