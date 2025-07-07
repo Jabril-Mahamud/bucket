@@ -28,14 +28,11 @@ import {
   SortAsc,
   Grid3X3,
   List,
-  Plus,
-  Volume2
+  Plus
 } from "lucide-react";
 import { FileUpload } from "./file-upload";
 import Link from "next/link";
 import { LibraryFile, FileProgressData, DatabaseFile } from "@/lib/types";
-import { useTTS } from "@/hooks/useTTS";
-import { toast } from "sonner";
 
 type SortOption = 'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'size-asc' | 'size-desc';
 type FilterOption = 'all' | 'pdf' | 'text' | 'audio';
@@ -52,62 +49,6 @@ export function LibraryPage() {
   const [showUpload, setShowUpload] = useState(false);
   
   const supabase = createClient();
-  const { convertToSpeech, isLoading: isTtsLoading } = useTTS({
-    fetchUsage: false, // Don't fetch usage on library page
-    fetchVoices: false // Don't need voices list on library page
-  });
-
-  const handleConvertToAudio = async (file: LibraryFile) => {
-    let textToConvert = file.text_content;
-
-    // If no text content is stored, try to fetch it directly for text files
-    if (!textToConvert && file.file_type === 'text/plain') {
-      const toastId = toast.loading("Reading text file...", {
-        description: `File: ${file.filename}`,
-      });
-
-      try {
-        const response = await fetch(`/api/files/${file.id}`);
-        if (response.ok) {
-          textToConvert = await response.text();
-        }
-        toast.dismiss(toastId);
-      } catch (error) {
-        console.error("Error reading text file:", error);
-        toast.error("Failed to read text file", { id: toastId });
-        return;
-      }
-    }
-
-    if (!textToConvert || textToConvert.trim().length === 0) {
-      toast.error("No text content available to convert to audio.", {
-        description: "Try uploading a text file (.txt) or PDF with extracted text content."
-      });
-      return;
-    }
-
-    const toastId = toast.loading("Starting audio conversion...", {
-      description: `File: ${file.filename}`,
-    });
-
-    try {
-      const result = await convertToSpeech(textToConvert, { fileId: file.id, autoPlay: false });
-      toast.success("Audio file created and saved to library!", {
-        id: toastId,
-        description: `${result.audioFilename} - ${result.characterCount} characters converted`,
-      });
-      // Refresh the file list to show the new audio file
-      setTimeout(() => {
-        fetchFiles();
-      }, 1000); // Small delay to ensure database has processed the new file
-    } catch (error) {
-      console.error("TTS conversion error:", error);
-      toast.error("Audio conversion failed", {
-        id: toastId,
-        description: error instanceof Error ? error.message : "Please try again later.",
-      });
-    }
-  };
 
   const fetchFiles = useCallback(async () => {
     try {
@@ -293,12 +234,6 @@ export function LibraryPage() {
       console.error('Error downloading file:', error);
       alert('Failed to download file');
     }
-  };
-
-  // Function to check if file can be converted to audio
-  const canConvertToAudio = (file: LibraryFile) => {
-    // Can convert if it has text content OR is a text file
-    return !!(file.text_content || file.file_type === 'text/plain' || file.file_type === 'application/pdf');
   };
 
   // Helper functions for better button labels
@@ -510,16 +445,6 @@ export function LibraryPage() {
                   <span className="truncate">{formatDate(file.uploaded_at)}</span>
                 </div>
 
-                {/* Show text content status if relevant */}
-                {canConvertToAudio(file) && (
-                  <div className="text-xs text-muted-foreground">
-                    <span className="text-green-600">✓ Can convert to audio</span>
-                    {file.text_content && (
-                      <span className="block">({file.text_content.split(/\s+/).filter(Boolean).length || 0} words)</span>
-                    )}
-                  </div>
-                )}
-
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   <Link href={`/library/view/${file.id}`} className="flex-1">
@@ -529,19 +454,6 @@ export function LibraryPage() {
                     </Button>
                   </Link>
                   <div className="flex gap-2">
-                    {canConvertToAudio(file) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleConvertToAudio(file)}
-                        disabled={isTtsLoading}
-                        className="gap-1 flex-1 sm:flex-none"
-                        title="Convert to Audio"
-                      >
-                        <Volume2 className="h-3 w-3" />
-                        <span className="sm:hidden">Audio</span>
-                      </Button>
-                    )}
                     <Button 
                       size="sm" 
                       variant="outline"
@@ -597,15 +509,6 @@ export function LibraryPage() {
                             </span>
                           </>
                         )}
-                        {canConvertToAudio(file) && (
-                          <>
-                            <span className="hidden sm:inline">•</span>
-                            <span className="text-green-600">✓ Can convert to audio</span>
-                            {file.text_content && (
-                              <span>({file.text_content.split(/\s+/).filter(Boolean).length || 0} words)</span>
-                            )}
-                          </>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -618,19 +521,6 @@ export function LibraryPage() {
                       </Button>
                     </Link>
                     <div className="flex gap-2">
-                      {canConvertToAudio(file) && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleConvertToAudio(file)}
-                          disabled={isTtsLoading}
-                          className="flex-1 sm:flex-none"
-                          title="Convert to Audio"
-                        >
-                          <Volume2 className="h-3 w-3" />
-                          <span className="sm:hidden ml-1">Audio</span>
-                        </Button>
-                      )}
                       <Button 
                         size="sm" 
                         variant="outline"
