@@ -1,3 +1,4 @@
+// lib/supabase/middleware.ts - Edge Runtime Compatible Version
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { Database } from "./database.types";
@@ -30,28 +31,24 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Do not run code between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
-
   // IMPORTANT: DO NOT REMOVE auth.getUser()
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Only redirect to auth if user is not authenticated and trying to access protected routes
   if (
-    request.nextUrl.pathname !== "/" &&
     !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/auth")
+    request.nextUrl.pathname.startsWith("/library") ||
+    request.nextUrl.pathname.startsWith("/protected")
   ) {
-    // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
     return NextResponse.redirect(url);
   }
 
-  // IMPORTANT: You *must* return the supabaseResponse object as it is.
   return supabaseResponse;
 }
+
+// Ensure this runs on Edge Runtime
+export const runtime = 'edge';
