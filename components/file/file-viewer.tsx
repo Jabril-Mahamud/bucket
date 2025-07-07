@@ -27,8 +27,6 @@ import {
   Volume2,
   Pause,
   Play,
-  SkipBack,
-  SkipForward,
   FileText,
   BookOpen,
   Headphones,
@@ -40,7 +38,6 @@ import {
   Search,
   Loader2,
   ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
