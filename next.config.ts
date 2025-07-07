@@ -7,20 +7,32 @@ const nextConfig: NextConfig = {
       "@supabase/realtime-js": "commonjs @supabase/realtime-js",
     });
 
-    // Additional fix for edge runtime
+    // Additional external packages that might cause issues
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         "@supabase/realtime-js": false,
+        "ws": false,
+        "encoding": false,
       };
     }
 
     return config;
   },
-  serverExternalPackages: ['@supabase/realtime-js'],
+  
+  // Keep these for better compatibility
+  serverExternalPackages: [
+    '@supabase/realtime-js',
+    '@aws-sdk/client-polly',
+    'cloudconvert'
+  ],
+  
   experimental: {
-    // Ensure edge runtime compatibility
-    serverComponentsExternalPackages: ['@supabase/realtime-js'],
+    serverComponentsExternalPackages: [
+      '@supabase/realtime-js',
+      '@aws-sdk/client-polly', 
+      'cloudconvert'
+    ],
   },
 };
 

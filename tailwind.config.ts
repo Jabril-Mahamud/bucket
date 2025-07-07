@@ -1,3 +1,4 @@
+// 1. tailwind.config.ts - Fix the require issue with ES6 imports
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 
@@ -62,3 +63,4 @@ export default {
   },
   plugins: [tailwindcssAnimate],
 } satisfies Config;
+
