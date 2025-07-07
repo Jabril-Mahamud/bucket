@@ -9,7 +9,7 @@ export async function signup(formData: FormData) {
   const password = formData.get("password") as string;
   const supabase = await createClient();
 
-  const origin = headers().get("origin");
+  const origin = (await headers()).get("origin");
 
   const { error } = await supabase.auth.signUp({
     email,
