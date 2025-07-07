@@ -1,10 +1,25 @@
+// components/file/file-viewer.tsx
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import {
   ArrowLeft,
@@ -15,13 +30,17 @@ import {
   SkipBack,
   SkipForward,
   FileText,
-  ExternalLink,
   BookOpen,
   Headphones,
-  Clock,
   BarChart3,
   VolumeX,
   Volume1,
+  Bookmark as BookmarkIcon,
+  Copy,
+  Search,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -31,237 +50,200 @@ import {
   FileProgressData,
 } from "@/lib/types";
 import { useFileProgress } from "@/hooks/useFileProgress";
+import { useBookmarks, Bookmark } from "@/hooks/useBookmarks";
+import { BookmarkDialog } from "@/components/bookmark/bookmark-dialog";
+import { BookmarkList } from "@/components/bookmark/bookmark-list";
+import { useTTS } from "@/hooks/useTTS";
+import { toast } from "sonner";
 
-// PDF Viewer Component
-function PDFViewer({
-  fileId,
-  fileData,
-}: {
-  fileId: string;
-  fileData: FileWithProgressData;
-}) {
-  const openInNewTab = () => {
-    window.open(`/api/files/${fileId}`, "_blank");
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* PDF Info Card */}
-      <Card className="border-2">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-            <div className="p-2 bg-red-100 dark:bg-red-900/20 rounded-lg">
-              <FileText className="h-6 w-6 text-red-600 dark:text-red-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                PDF Document
-                <Badge variant="destructive">PDF</Badge>
-              </div>
-              <p className="text-sm text-muted-foreground font-normal">
-                {fileData.file_size
-                  ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
-                  : 0}{" "}
-                MB
-              </p>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Progress Section */}
-          {fileData.progress && fileData.progress.progress_percentage > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Reading Progress</span>
-                <span className="text-sm text-muted-foreground">
-                  {Math.round(fileData.progress.progress_percentage)}% complete
-                </span>
-              </div>
-              <Progress
-                value={fileData.progress.progress_percentage}
-                className="h-3"
-              />
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="space-y-3">
-            <Button
-              size="lg"
-              onClick={openInNewTab}
-              className="w-full gap-3 h-12"
-            >
-              <ExternalLink className="h-5 w-5" />
-              Open PDF in New Tab
-            </Button>
-
-            
-          </div>
-
-          <div className="text-center text-sm text-muted-foreground">
-            Opens in your browsers built-in PDF viewer with full functionality
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Embedded PDF Viewer */}
-      <Card className="border-2">
-        <CardHeader>
-          <CardTitle>Embedded Viewer</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="w-full h-[600px] border-2 border-dashed border-muted rounded-lg overflow-hidden bg-muted/30">
-            <iframe
-              src={`/api/files/${fileId}`}
-              className="w-full h-full"
-              title={fileData.filename}
-            />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+// Centralized Audio State Management
+interface AudioState {
+  isLoading: boolean;
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  volume: number;
+  isMuted: boolean;
+  error: string | null;
+  fileId: string | null;
 }
 
-// Audio Player Component
-function AudioPlayer({
-  fileId,
-  fileData,
+const initialAudioState: AudioState = {
+  isLoading: false,
+  isPlaying: false,
+  currentTime: 0,
+  duration: 0,
+  volume: 1,
+  isMuted: false,
+  error: null,
+  fileId: null,
+};
+
+// Mobile-Optimized Audio Player
+function MobileAudioPlayer({
+  audioFile,
+  onBookmarkCreate,
+  isVisible = true,
 }: {
-  fileId: string;
-  fileData: FileWithProgressData;
+  audioFile: FileWithProgressData | null;
+  onBookmarkCreate: (timestamp: number, title: string, note?: string) => void;
+  isVisible?: boolean;
 }) {
+  const [state, setState] = useState<AudioState>(initialAudioState);
+  const [bookmarkDialogOpen, setBookmarkDialogOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { updateProgress, updateProgressImmediate } = useFileProgress();
 
-  const { updateProgress, updateProgressImmediate, isUpdating } =
-    useFileProgress();
-
-  const saveProgress = useCallback(
-    async (currentTime: number, immediate = false) => {
-      try {
-        if (!duration || duration === 0) return;
-
-        const progressPercentage = (currentTime / duration) * 100;
-
-        if (immediate) {
-          await updateProgressImmediate(
-            fileId,
-            progressPercentage,
-            currentTime.toString()
-          );
-        } else {
-          await updateProgress(
-            fileId,
-            progressPercentage,
-            currentTime.toString()
-          );
-        }
-      } catch (error) {
-        console.error("Error saving progress:", error);
-      }
-    },
-    [fileId, duration, updateProgress, updateProgressImmediate]
-  );
-
+  // Reset state when audio file changes
   useEffect(() => {
+    setState(initialAudioState);
+  }, [audioFile?.id]);
+
+  // Audio lifecycle management
+  useEffect(() => {
+    if (!audioFile || !audioRef.current) {
+      setState(prev => ({ ...prev, isLoading: false, error: null }));
+      return;
+    }
+
     const audio = audioRef.current;
-    if (!audio) return;
+    setState(prev => ({ ...prev, isLoading: true, error: null, fileId: audioFile.id }));
+
+    const timeout = setTimeout(() => {
+      setState(prev => prev.isLoading ? { 
+        ...prev, 
+        isLoading: false, 
+        error: "Audio loading timed out" 
+      } : prev);
+    }, 15000);
 
     const handleLoadedMetadata = () => {
-      setDuration(audio.duration);
-      setLoading(false);
+      clearTimeout(timeout);
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        duration: audio.duration,
+        error: null,
+      }));
 
-      if (fileData.progress?.last_position) {
-        const lastTime = parseFloat(fileData.progress.last_position);
+      if (audioFile.progress?.last_position) {
+        const lastTime = parseFloat(audioFile.progress.last_position);
         if (lastTime > 0 && lastTime < audio.duration) {
           audio.currentTime = lastTime;
-          setCurrentTime(lastTime);
+          setState(prev => ({ ...prev, currentTime: lastTime }));
         }
       }
     };
 
     const handleTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
-
-      // Save progress every 10 seconds (debounced)
+      setState(prev => ({ ...prev, currentTime: audio.currentTime }));
+      
       if (Math.floor(audio.currentTime) % 10 === 0) {
-        saveProgress(audio.currentTime, false);
+        const progressPercentage = (audio.currentTime / audio.duration) * 100;
+        updateProgress(audioFile.id, progressPercentage, audio.currentTime.toString());
       }
     };
 
+    const handlePlay = () => setState(prev => ({ ...prev, isPlaying: true }));
+    const handlePause = () => setState(prev => ({ ...prev, isPlaying: false }));
+    
     const handleEnded = () => {
-      setIsPlaying(false);
-      // Save completion immediately
-      saveProgress(audio.duration, true);
+      setState(prev => ({ ...prev, isPlaying: false }));
+      const progressPercentage = (audio.duration / audio.duration) * 100;
+      updateProgressImmediate(audioFile.id, progressPercentage, audio.duration.toString());
     };
 
-    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audio.addEventListener("timeupdate", handleTimeUpdate);
-    audio.addEventListener("ended", handleEnded);
+    const handleError = () => {
+      clearTimeout(timeout);
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        isPlaying: false,
+        error: "Failed to load audio file",
+      }));
+    };
+
+    const handleCanPlay = () => {
+      clearTimeout(timeout);
+      setState(prev => ({ ...prev, isLoading: false, error: null }));
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
+    audio.addEventListener('canplay', handleCanPlay);
+
+    audio.src = `/api/files/${audioFile.id}`;
+    audio.load();
 
     return () => {
-      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("ended", handleEnded);
-    };
-  }, [fileData.progress, saveProgress]);
-
-  const togglePlayPause = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (isPlaying) {
+      clearTimeout(timeout);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
+      audio.removeEventListener('canplay', handleCanPlay);
       audio.pause();
-    } else {
-      audio.play();
+      audio.src = '';
+    };
+  }, [audioFile, updateProgress, updateProgressImmediate]);
+
+  const togglePlayPause = async () => {
+    if (!audioRef.current) return;
+
+    try {
+      if (state.isPlaying) {
+        audioRef.current.pause();
+      } else {
+        await audioRef.current.play();
+      }
+    } catch (err) {
+      console.error('Playback error:', err);
+      setState(prev => ({ 
+        ...prev, 
+        error: "Playback failed",
+        isPlaying: false 
+      }));
     }
-    setIsPlaying(!isPlaying);
   };
 
   const seek = (time: number) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    audio.currentTime = time;
-    setCurrentTime(time);
-    // Save progress immediately when user seeks
-    saveProgress(time, true);
-  };
-
-  const skip = (seconds: number) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
-    seek(newTime);
-  };
-
-  const toggleMute = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (isMuted) {
-      audio.volume = volume;
-      setIsMuted(false);
-    } else {
-      audio.volume = 0;
-      setIsMuted(true);
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = time;
+    setState(prev => ({ ...prev, currentTime: time }));
+    
+    if (audioFile) {
+      const progressPercentage = (time / state.duration) * 100;
+      updateProgressImmediate(audioFile.id, progressPercentage, time.toString());
     }
   };
 
-  const handleVolumeChange = (newVolume: number) => {
-    const audio = audioRef.current;
-    if (!audio) return;
+  const skip = (seconds: number) => {
+    const newTime = Math.max(0, Math.min(state.duration, state.currentTime + seconds));
+    seek(newTime);
+  };
 
-    setVolume(newVolume);
-    audio.volume = newVolume;
-    setIsMuted(newVolume === 0);
+  const handleVolumeChange = (newVolume: number) => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = newVolume;
+    setState(prev => ({ 
+      ...prev, 
+      volume: newVolume, 
+      isMuted: newVolume === 0 
+    }));
+  };
+
+  const toggleMute = () => {
+    if (!audioRef.current) return;
+    const newMuted = !state.isMuted;
+    audioRef.current.volume = newMuted ? 0 : state.volume;
+    setState(prev => ({ ...prev, isMuted: newMuted }));
   };
 
   const formatTime = (time: number) => {
@@ -270,204 +252,735 @@ function AudioPlayer({
     const seconds = Math.floor(time % 60);
 
     if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
-        .toString()
-        .padStart(2, "0")}`;
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
     }
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   const getVolumeIcon = () => {
-    if (isMuted || volume === 0) return <VolumeX className="h-4 w-4" />;
-    if (volume < 0.5) return <Volume1 className="h-4 w-4" />;
+    if (state.isMuted || state.volume === 0) return <VolumeX className="h-4 w-4" />;
+    if (state.volume < 0.5) return <Volume1 className="h-4 w-4" />;
     return <Volume2 className="h-4 w-4" />;
   };
 
-  if (loading) {
+  if (!audioFile || !isVisible) return null;
+
+  if (state.error) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-            <Headphones className="h-8 w-8 text-primary animate-pulse" />
+      <div className="bg-background border-b border-border p-3 md:p-4">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-destructive">
+            <Headphones className="h-4 w-4" />
+            <span>Audio Error: {state.error}</span>
           </div>
-          <div className="space-y-2">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
-            <p className="text-lg font-medium">Loading audio...</p>
-            <p className="text-sm text-muted-foreground">
-              Preparing your audio file
-            </p>
-          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setState(prev => ({ ...prev, error: null, isLoading: true }))}
+          >
+            Retry
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <audio ref={audioRef} src={`/api/files/${fileId}`} preload="metadata" />
+    <div className="bg-background border-b border-border sticky top-0 z-10">
+      <audio ref={audioRef} preload="metadata" />
+      
+      {/* Mobile-First Player Bar */}
+      <div className="max-w-4xl mx-auto p-3 md:p-4">
+        {/* Main Controls Row */}
+        <div className="flex items-center gap-2 md:gap-4">
+          {/* Play/Pause Button */}
+          <Button
+            size="sm"
+            onClick={togglePlayPause}
+            disabled={state.isLoading}
+            className="h-9 w-9 md:h-10 md:w-10 rounded-full p-0 flex-shrink-0"
+          >
+            {state.isLoading ? (
+              <Loader2 className="h-4 w-4 md:h-5 md:w-5 animate-spin" />
+            ) : state.isPlaying ? (
+              <Pause className="h-4 w-4 md:h-5 md:w-5" />
+            ) : (
+              <Play className="h-4 w-4 md:h-5 md:w-5 ml-0.5" />
+            )}
+          </Button>
 
-      {/* Main Audio Player */}
-      <Card className="border-2">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
-              <Headphones className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                Audio Player
-                <Badge variant="default" className="bg-emerald-600">
-                  Audio
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground font-normal">
-                {formatTime(duration)} •{" "}
-                {fileData.file_size
-                  ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
-                  : 0}{" "}
-                MB
-              </p>
-            </div>
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent className="space-y-6">
-          {/* Progress Section */}
-          <div className="space-y-4">
-            <div className="flex justify-between items-center text-sm">
-              <span className="flex items-center gap-2 text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                {formatTime(currentTime)}
-              </span>
-              <span className="text-muted-foreground">
-                {formatTime(duration)}
-              </span>
-            </div>
-
-            {/* Seek Bar */}
+          {/* Progress Section - Mobile Optimized */}
+          <div className="flex-1 min-w-0">
+            {/* Progress Bar */}
             <div
-              className="w-full bg-secondary rounded-full h-3 cursor-pointer hover:h-4 transition-all group"
+              className="w-full bg-secondary rounded-full h-2 md:h-3 cursor-pointer touch-manipulation"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const percentage = x / rect.width;
-                seek(percentage * duration);
+                seek(percentage * state.duration);
               }}
             >
               <div
-                className="bg-primary h-full rounded-full transition-all duration-300 relative group-hover:bg-primary/90"
-                style={{ width: `${(currentTime / duration) * 100}%` }}
-              >
-                <div className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
+                className="bg-primary h-full rounded-full transition-all duration-300"
+                style={{ width: `${(state.currentTime / state.duration) * 100}%` }}
+              />
             </div>
-
-            {/* Overall Progress */}
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Overall Progress</span>
-              <span className="font-medium">
-                {Math.round((currentTime / duration) * 100)}%
+            
+            {/* Time Display */}
+            <div className="flex justify-between items-center mt-1">
+              <span className="text-xs text-muted-foreground">
+                {formatTime(state.currentTime)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {formatTime(state.duration)}
               </span>
             </div>
           </div>
 
-          {/* Controls */}
-          <div className="flex items-center justify-center gap-6">
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => skip(-10)}
-              className="gap-2 h-12 px-6"
-            >
-              <SkipBack className="h-5 w-5" />
-              10s
-            </Button>
+          {/* Quick Actions */}
+          <div className="flex items-center gap-1">
+            {/* Mobile: Show fewer controls */}
+            <div className="hidden md:flex items-center gap-1">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => skip(-10)}
+                className="h-8 px-2 text-xs"
+              >
+                -10s
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => skip(10)}
+                className="h-8 px-2 text-xs"
+              >
+                +10s
+              </Button>
+            </div>
 
-            <Button
-              size="lg"
-              onClick={togglePlayPause}
-              className="h-14 w-14 rounded-full p-0"
-            >
-              {isPlaying ? (
-                <Pause className="h-7 w-7" />
-              ) : (
-                <Play className="h-7 w-7 ml-1" />
-              )}
-            </Button>
+            {/* Volume (Desktop only) */}
+            <div className="hidden md:flex items-center gap-2 w-20">
+              <Button variant="ghost" size="sm" onClick={toggleMute} className="h-8 w-8 p-0">
+                {getVolumeIcon()}
+              </Button>
+              <div
+                className="flex-1 bg-secondary rounded-full h-1.5 cursor-pointer"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const percentage = x / rect.width;
+                  handleVolumeChange(percentage);
+                }}
+              >
+                <div
+                  className="bg-primary h-full rounded-full transition-all"
+                  style={{ width: `${state.isMuted ? 0 : state.volume * 100}%` }}
+                />
+              </div>
+            </div>
 
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => skip(10)}
-              className="gap-2 h-12 px-6"
-            >
-              10s
-              <SkipForward className="h-5 w-5" />
-            </Button>
-          </div>
-
-          {/* Volume Control */}
-          <div className="flex items-center gap-3">
+            {/* Bookmark */}
             <Button
               variant="ghost"
               size="sm"
-              onClick={toggleMute}
-              className="flex-shrink-0"
+              onClick={() => setBookmarkDialogOpen(true)}
+              className="h-8 w-8 p-0"
             >
-              {getVolumeIcon()}
+              <BookmarkIcon className="h-4 w-4" />
             </Button>
-            <div
-              className="flex-1 bg-secondary rounded-full h-2 cursor-pointer"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const percentage = x / rect.width;
-                handleVolumeChange(percentage);
-              }}
-            >
-              <div
-                className="bg-primary h-full rounded-full transition-all"
-                style={{ width: `${isMuted ? 0 : volume * 100}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground w-8 text-right">
-              {Math.round((isMuted ? 0 : volume) * 100)}%
-            </span>
-          </div>
 
-          {/* Saved Progress Info */}
-          {fileData.progress && fileData.progress.progress_percentage > 0 && (
-            <div className="bg-muted/50 rounded-lg p-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 text-muted-foreground">
-                  <BarChart3 className="h-4 w-4" />
-                  Last saved progress
-                  {isUpdating && <span className="text-xs">(updating...)</span>}
-                </span>
-                <span className="font-medium">
-                  {Math.round(fileData.progress.progress_percentage)}%
-                </span>
+            {/* Expand/Settings */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="h-8 w-8 p-0"
+            >
+              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+
+        {/* Expanded Controls for Mobile */}
+        {isExpanded && (
+          <div className="mt-4 pt-3 border-t border-border space-y-3">
+            {/* Skip Controls for Mobile */}
+            <div className="flex items-center justify-center gap-2 md:hidden">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => skip(-30)}
+                className="gap-1"
+              >
+                <SkipBack className="h-4 w-4" />
+                30s
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => skip(-10)}
+                className="gap-1"
+              >
+                10s
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => skip(10)}
+                className="gap-1"
+              >
+                10s
+                <SkipForward className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => skip(30)}
+                className="gap-1"
+              >
+                30s
+                <SkipForward className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Volume for Mobile */}
+            <div className="flex items-center gap-3 md:hidden">
+              <Button variant="ghost" size="sm" onClick={toggleMute} className="flex-shrink-0">
+                {getVolumeIcon()}
+              </Button>
+              <div
+                className="flex-1 bg-secondary rounded-full h-3 cursor-pointer touch-manipulation"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const percentage = x / rect.width;
+                  handleVolumeChange(percentage);
+                }}
+              >
+                <div
+                  className="bg-primary h-full rounded-full transition-all"
+                  style={{ width: `${state.isMuted ? 0 : state.volume * 100}%` }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground w-8 text-right">
+                {Math.round((state.isMuted ? 0 : state.volume) * 100)}%
+              </span>
+            </div>
+
+            {/* File Info */}
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground min-w-0">
+                <Headphones className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">Listening to: {audioFile.filename}</span>
+              </div>
+              <div className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                {Math.round((state.currentTime / state.duration) * 100)}%
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Bookmark Dialog */}
+      <BookmarkDialog
+        open={bookmarkDialogOpen}
+        onOpenChange={setBookmarkDialogOpen}
+        onSave={async (title, note) => await onBookmarkCreate(state.currentTime, title, note)}
+        position={formatTime(state.currentTime)}
+      />
     </div>
   );
 }
 
+// Mobile-Optimized Text Reader
+function TextReader({
+  fileId,
+  fileData,
+  relatedAudioFile,
+  onConvertToAudio,
+  isConverting,
+}: {
+  fileId: string;
+  fileData: FileWithProgressData;
+  relatedAudioFile?: FileWithProgressData;
+  onConvertToAudio: () => void;
+  isConverting: boolean;
+}) {
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [loadingText, setLoadingText] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedText, setSelectedText] = useState<string>("");
+  const [selectionPosition, setSelectionPosition] = useState<number | null>(null);
+  const [bookmarkDialogOpen, setBookmarkDialogOpen] = useState(false);
+  const [bookmarksOpen, setBookmarksOpen] = useState(false);
+  
+  const textContainerRef = useRef<HTMLDivElement>(null);
+  const { createTextBookmark, createAudioBookmark } = useBookmarks(fileId);
+
+  useEffect(() => {
+    const fetchTextContent = async () => {
+      try {
+        setLoadingText(true);
+        const response = await fetch(`/api/files/${fileId}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const text = await response.text();
+        setTextContent(text);
+      } catch (e) {
+        console.error("Error fetching text content:", e);
+        setError("Failed to load text content.");
+      } finally {
+        setLoadingText(false);
+      }
+    };
+
+    fetchTextContent();
+  }, [fileId]);
+
+  const handleTextSelection = () => {
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim()) {
+      const selectedStr = selection.toString().trim();
+      setSelectedText(selectedStr);
+      
+      const range = selection.getRangeAt(0);
+      const textContainer = textContainerRef.current;
+      if (textContainer) {
+        const beforeRange = document.createRange();
+        beforeRange.setStart(textContainer, 0);
+        beforeRange.setEnd(range.startContainer, range.startOffset);
+        const position = beforeRange.toString().length;
+        setSelectionPosition(position);
+      }
+    } else {
+      setSelectedText("");
+      setSelectionPosition(null);
+    }
+  };
+
+  const handleAddTextBookmark = async (title: string, note?: string) => {
+    if (selectionPosition === null) return;
+
+    const paragraphs = textContent?.split('\n\n') || [];
+    let paragraphIndex = 0;
+    let charCount = 0;
+    
+    for (let i = 0; i < paragraphs.length; i++) {
+      const paragraphLength = paragraphs[i].length + 2;
+      if (charCount + paragraphLength > selectionPosition) {
+        paragraphIndex = i;
+        break;
+      }
+      charCount += paragraphLength;
+    }
+
+    await createTextBookmark(fileId, title, selectionPosition, paragraphIndex, selectedText, note);
+  };
+
+  const handleAddAudioBookmark = async (timestamp: number, title: string, note?: string) => {
+    await createAudioBookmark(fileId, title, timestamp, note);
+  };
+
+  const handleNavigateToBookmark = useCallback((bookmark: Bookmark) => {
+    if (bookmark.position_data.type !== 'text') return;
+
+    const { paragraph } = bookmark.position_data;
+    const textContainer = textContainerRef.current;
+    
+    if (textContainer && paragraph !== undefined) {
+      const paragraphElements = textContainer.querySelectorAll('p');
+      if (paragraphElements[paragraph]) {
+        paragraphElements[paragraph].scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+        
+        paragraphElements[paragraph].classList.add('bg-yellow-200', 'dark:bg-yellow-900/30');
+        setTimeout(() => {
+          paragraphElements[paragraph].classList.remove('bg-yellow-200', 'dark:bg-yellow-900/30');
+        }, 2000);
+      }
+    }
+    
+    // Close bookmarks on mobile after navigation
+    setBookmarksOpen(false);
+  }, []);
+
+  const handleCopyText = () => {
+    if (selectedText) {
+      navigator.clipboard.writeText(selectedText);
+      toast.success("Text copied to clipboard");
+    }
+  };
+
+  if (loadingText) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-lg font-medium">Loading text...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 md:px-6 py-12">
+        <Card className="border-2">
+          <CardContent className="pt-12 pb-12 text-center space-y-6">
+            <div className="w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
+              <FileText className="h-10 w-10 text-destructive" />
+            </div>
+            <h3 className="text-xl font-semibold">Error loading content</h3>
+            <p className="text-muted-foreground max-w-md mx-auto">{error}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const canConvertToAudio = !!(fileData.text_content || textContent);
+
+  return (
+    <div className="relative">
+      {/* Audio Player Bar */}
+      <MobileAudioPlayer 
+        audioFile={relatedAudioFile || null}
+        onBookmarkCreate={handleAddAudioBookmark}
+        isVisible={!!relatedAudioFile}
+      />
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8">
+        {/* Mobile-Optimized Header */}
+        <div className="mb-6 space-y-4">
+          {/* Status Badges */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="default" className="bg-blue-600">
+              <BookOpen className="h-3 w-3 mr-1" />
+              Text
+            </Badge>
+            {relatedAudioFile && (
+              <Badge variant="outline" className="text-emerald-600 border-emerald-600">
+                <Headphones className="h-3 w-3 mr-1" />
+                Audio Available
+              </Badge>
+            )}
+          </div>
+          
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Bookmarks - Mobile Sheet, Desktop Button */}
+            <Sheet open={bookmarksOpen} onOpenChange={setBookmarksOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <BookmarkIcon className="h-4 w-4" />
+                  Bookmarks
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+                <SheetHeader>
+                  <SheetTitle>Bookmarks</SheetTitle>
+                  <SheetDescription>
+                    Your saved reading positions and notes
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="mt-6">
+                  <BookmarkList 
+                    fileId={fileId} 
+                    onNavigateToBookmark={handleNavigateToBookmark}
+                  />
+                </div>
+              </SheetContent>
+            </Sheet>
+            
+            {/* Convert to Audio */}
+            {!relatedAudioFile && canConvertToAudio && (
+              <Button 
+                onClick={onConvertToAudio}
+                disabled={isConverting}
+                size="sm"
+                className="gap-2"
+              >
+                {isConverting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="hidden sm:inline">Converting...</span>
+                    <span className="sm:hidden">...</span>
+                  </>
+                ) : (
+                  <>
+                    <Volume2 className="h-4 w-4" />
+                    <span className="hidden sm:inline">Create Audio</span>
+                    <span className="sm:hidden">Audio</span>
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Reading Area - Full Width on Mobile */}
+        <div className="space-y-4">
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div 
+                ref={textContainerRef}
+                className="prose prose-lg dark:prose-invert max-w-none min-h-[70vh] p-4 md:p-8 bg-background border rounded-lg shadow-sm cursor-text"
+                style={{
+                  lineHeight: '1.8',
+                  fontSize: window.innerWidth < 768 ? '16px' : '18px',
+                  fontFamily: 'ui-serif, Georgia, serif'
+                }}
+                onMouseUp={handleTextSelection}
+                onTouchEnd={handleTextSelection}
+              >
+                {textContent ? (
+                  <div className="text-foreground">
+                    {textContent.split('\n\n').map((paragraph, index) => (
+                      <p key={index} className="mb-6 last:mb-0 transition-colors duration-200">
+                        {paragraph.trim()}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No text content available.</p>
+                )}
+              </div>
+            </ContextMenuTrigger>
+            
+            <ContextMenuContent className="w-56">
+              {selectedText && (
+                <>
+                  <ContextMenuItem 
+                    onClick={() => setBookmarkDialogOpen(true)}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <BookmarkIcon className="h-4 w-4" />
+                    Add Bookmark
+                  </ContextMenuItem>
+                  <ContextMenuItem 
+                    onClick={handleCopyText}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy Text
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                </>
+              )}
+              <ContextMenuItem className="gap-2 cursor-pointer">
+                <Search className="h-4 w-4" />
+                Search in Document
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+
+          {/* Selection Indicator - Mobile Optimized */}
+          {selectedText && (
+            <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-medium flex-shrink-0">Selected:</span>
+                  <span className="text-sm text-muted-foreground italic truncate">
+                    &quot;{selectedText.length > 40 ? selectedText.substring(0, 40) + '...' : selectedText}&quot;
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => setBookmarkDialogOpen(true)}
+                  className="gap-1 flex-shrink-0"
+                >
+                  <BookmarkIcon className="h-3 w-3" />
+                  Bookmark
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bookmark Dialog */}
+      <BookmarkDialog
+        open={bookmarkDialogOpen}
+        onOpenChange={setBookmarkDialogOpen}
+        onSave={handleAddTextBookmark}
+        selectedText={selectedText}
+        position={selectionPosition !== null ? `Character ${selectionPosition}` : undefined}
+      />
+    </div>
+  );
+}
+
+// Standalone Audio Player
+function StandaloneAudioPlayer({
+  fileId,
+  fileData,
+}: {
+  fileId: string;
+  fileData: FileWithProgressData;
+}) {
+  const { createAudioBookmark } = useBookmarks(fileId);
+  const [bookmarksOpen, setBookmarksOpen] = useState(false);
+
+  const handleAddAudioBookmark = async (timestamp: number, title: string, note?: string) => {
+    await createAudioBookmark(fileId, title, timestamp, note);
+  };
+
+  const handleBookmarkNavigation = useCallback((bookmark: Bookmark) => {
+    console.log('Navigating to bookmark:', bookmark);
+    setBookmarksOpen(false);
+  }, []);
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8">
+      <div className="space-y-6">
+        {/* Audio Player Card */}
+        <Card className="border-2">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
+                  <Headphones className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    Audio Player
+                    <Badge variant="default" className="bg-emerald-600">Audio</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground font-normal">
+                    {fileData.file_size ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100 : 0} MB
+                  </p>
+                </div>
+              </div>
+              
+              {/* Bookmarks Button */}
+              <Sheet open={bookmarksOpen} onOpenChange={setBookmarksOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <BookmarkIcon className="h-4 w-4" />
+                    <span className="hidden sm:inline">Bookmarks</span>
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+                  <SheetHeader>
+                    <SheetTitle>Bookmarks</SheetTitle>
+                    <SheetDescription>
+                      Your saved audio positions and notes
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="mt-6">
+                    <BookmarkList 
+                      fileId={fileId} 
+                      onNavigateToBookmark={handleBookmarkNavigation}
+                    />
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            <MobileAudioPlayer 
+              audioFile={fileData}
+              onBookmarkCreate={handleAddAudioBookmark}
+              isVisible={true}
+            />
+
+            {fileData.progress && fileData.progress.progress_percentage > 0 && (
+              <div className="bg-muted/50 rounded-lg p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <BarChart3 className="h-4 w-4" />
+                    Last saved progress
+                  </span>
+                  <span className="font-medium">
+                    {Math.round(fileData.progress.progress_percentage)}%
+                  </span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// Main File Viewer Component
 export function FileViewer({ fileId }: { fileId: string }) {
   const [fileData, setFileData] = useState<FileWithProgressData | null>(null);
+  const [relatedAudioFile, setRelatedAudioFile] = useState<FileWithProgressData | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createClient();
+  const { convertToSpeech, isLoading: isTtsLoading } = useTTS();
+
+  const handleConvertToAudio = async () => {
+    if (!fileData) {
+      toast.error("No file data available.");
+      return;
+    }
+
+    let textToConvert = fileData.text_content;
+
+    if (!textToConvert && fileData.file_type === 'text/plain') {
+      try {
+        const response = await fetch(`/api/files/${fileData.id}`);
+        if (response.ok) {
+          textToConvert = await response.text();
+        }
+      } catch (error) {
+        console.error("Error reading text file:", error);
+        toast.error("Failed to read text file");
+        return;
+      }
+    }
+
+    if (!textToConvert || textToConvert.trim().length === 0) {
+      toast.error("No text content available to convert to audio.");
+      return;
+    }
+
+    const toastId = toast.loading("Converting to audio...", {
+      description: `File: ${fileData.filename}`,
+    });
+
+    try {
+      const result = await convertToSpeech(textToConvert, { fileId: fileData.id, autoPlay: false });
+      
+      if (result.audioFileId) {
+        toast.success("Audio conversion complete!", {
+          id: toastId,
+          description: "The audio file has been created and is ready to play.",
+        });
+        
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        toast.error("Audio conversion failed", {
+          id: toastId,
+          description: "No audio file was created. Please try again.",
+        });
+      }
+    } catch (error) {
+      console.error("TTS conversion error:", error);
+      toast.error("Audio conversion failed", {
+        id: toastId,
+        description: error instanceof Error ? error.message : "Please try again later.",
+      });
+    }
+  };
 
   useEffect(() => {
     const fetchFile = async () => {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           router.push("/auth/login");
           return;
@@ -475,22 +988,19 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
         const { data: file, error: fileError } = await supabase
           .from("files")
-          .select(
-            `
+          .select(`
             *,
             file_progress (
               progress_percentage,
               last_position
             )
-          `
-          )
+          `)
           .eq("id", fileId)
           .eq("user_id", user.id)
           .single();
 
         if (fileError) throw fileError;
 
-        // Type the file data to match our query structure
         const fileWithProgress = file as DatabaseFile & {
           file_progress: FileProgressData[] | null;
         };
@@ -499,15 +1009,50 @@ export function FileViewer({ fileId }: { fileId: string }) {
           ...fileWithProgress,
           progress: fileWithProgress.file_progress?.[0]
             ? {
-                progress_percentage:
-                  fileWithProgress.file_progress[0].progress_percentage || 0,
-                last_position:
-                  fileWithProgress.file_progress[0].last_position || "0",
+                progress_percentage: fileWithProgress.file_progress[0].progress_percentage || 0,
+                last_position: fileWithProgress.file_progress[0].last_position || "0",
               }
             : null,
         };
 
         setFileData(formattedFile);
+
+        // Look for related audio file
+        if (!formattedFile.file_type.startsWith('audio/')) {
+          const baseFilename = formattedFile.filename.replace(/\.[^/.]+$/, '');
+          const audioFilename = `${baseFilename} (Audio).mp3`;
+          
+          const { data: audioFile } = await supabase
+            .from("files")
+            .select(`
+              *,
+              file_progress (
+                progress_percentage,
+                last_position
+              )
+            `)
+            .eq("filename", audioFilename)
+            .eq("user_id", user.id)
+            .single();
+
+          if (audioFile) {
+            const audioFileWithProgress = audioFile as DatabaseFile & {
+              file_progress: FileProgressData[] | null;
+            };
+
+            const formattedAudioFile: FileWithProgressData = {
+              ...audioFileWithProgress,
+              progress: audioFileWithProgress.file_progress?.[0]
+                ? {
+                    progress_percentage: audioFileWithProgress.file_progress[0].progress_percentage || 0,
+                    last_position: audioFileWithProgress.file_progress[0].last_position || "0",
+                  }
+                : null,
+            };
+
+            setRelatedAudioFile(formattedAudioFile);
+          }
+        }
       } catch (error) {
         console.error("Error fetching file:", error);
         router.push("/library");
@@ -537,16 +1082,15 @@ export function FileViewer({ fileId }: { fileId: string }) {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Error downloading file:", error);
-      alert("Failed to download file");
+      toast.error("Failed to download file");
     }
   };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "Unknown date";
     return new Date(dateString).toLocaleDateString("en-US", {
-      weekday: "long",
       year: "numeric",
-      month: "long",
+      month: "short",
       day: "numeric",
     });
   };
@@ -564,7 +1108,7 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
   if (!fileData) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-12 px-4">
         <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
           <FileText className="h-8 w-8 text-destructive" />
         </div>
@@ -583,72 +1127,51 @@ export function FileViewer({ fileId }: { fileId: string }) {
   }
 
   const isAudio = fileData.file_type.startsWith("audio/");
-  const isPDF = fileData.file_type === "application/pdf";
-  const isEPUB = fileData.file_type === "application/epub+zip";
+  const isText = fileData.file_type === "text/plain";
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          <Link href="/library">
-            <Button variant="outline" size="sm" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Library
+    <div className="min-h-screen bg-background">
+      {/* Mobile-Optimized Header */}
+      <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-20">
+        <div className="max-w-4xl mx-auto px-4 md:px-6 py-3 md:py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 md:gap-4 min-w-0">
+              <Link href="/library">
+                <Button variant="ghost" size="sm" className="gap-2 flex-shrink-0">
+                  <ArrowLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">Library</span>
+                </Button>
+              </Link>
+              <div className="text-xs md:text-sm text-muted-foreground truncate">
+                {formatDate(fileData.uploaded_at)}
+              </div>
+            </div>
+            
+            <Button variant="ghost" size="sm" onClick={downloadFile} className="gap-2 flex-shrink-0">
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Download</span>
             </Button>
-          </Link>
-          <Button variant="outline" onClick={downloadFile} className="gap-2">
-            <Download className="h-4 w-4" />
-            Download
-          </Button>
-        </div>
-
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight line-clamp-2">
-            {fileData.filename}
-          </h1>
-          <div className="flex items-center gap-4 text-muted-foreground">
-            <span>Uploaded {formatDate(fileData.uploaded_at)}</span>
-            <span>•</span>
-            <span>
-              {fileData.file_size
-                ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100
-                : 0}{" "}
-              MB
-            </span>
+          </div>
+          
+          <div className="mt-2">
+            <h1 className="text-lg md:text-2xl font-bold tracking-tight line-clamp-2">
+              {fileData.filename}
+            </h1>
           </div>
         </div>
       </div>
 
-      {/* File Viewer */}
-      {isAudio && <AudioPlayer fileId={fileId} fileData={fileData} />}
-
-      {isPDF && <PDFViewer fileId={fileId} fileData={fileData} />}
-
-      {!isAudio && !isPDF && (
-        <Card className="border-2">
-          <CardContent className="pt-12 pb-12 text-center space-y-6">
-            <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto">
-              {isEPUB ? (
-                <BookOpen className="h-10 w-10 text-muted-foreground" />
-              ) : (
-                <FileText className="h-10 w-10 text-muted-foreground" />
-              )}
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-xl font-semibold">Preview not available</h3>
-              <p className="text-muted-foreground max-w-md mx-auto">
-                This file type is not supported for preview. Download the file
-                to view it on your device.
-              </p>
-            </div>
-            <Button onClick={downloadFile} size="lg" className="gap-2">
-              <Download className="h-4 w-4" />
-              Download File
-            </Button>
-          </CardContent>
-        </Card>
+      {/* File Content */}
+      {isAudio && <StandaloneAudioPlayer fileId={fileId} fileData={fileData} />}
+      {isText && (
+        <TextReader 
+          fileId={fileId} 
+          fileData={fileData} 
+          relatedAudioFile={relatedAudioFile}
+          onConvertToAudio={handleConvertToAudio}
+          isConverting={isTtsLoading}
+        />
       )}
     </div>
-  )
+  );
 }
