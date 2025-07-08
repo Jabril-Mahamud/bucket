@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      bookmarks: {
+        Row: {
+          created_at: string | null
+          file_id: string
+          id: string
+          note: string | null
+          position_data: Json
+          text_preview: string | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          file_id: string
+          id?: string
+          note?: string | null
+          position_data: Json
+          text_preview?: string | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          file_id?: string
+          id?: string
+          note?: string | null
+          position_data?: Json
+          text_preview?: string | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookmarks_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookmarks_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files_with_progress"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       collection_files: {
         Row: {
           added_at: string | null
@@ -476,15 +527,15 @@ export type Database = {
         Args: {
           target_user_id: string
           target_file_id: string
-          start_time: number
-          end_time: number
+          start_time?: number
+          end_time_param?: number
         }
         Returns: {
           id: string
           title: string
           note: string
-          timestamp: number
-          end_timestamp: number
+          time_position: number
+          end_time_position: number
           text_preview: string
           created_at: string
         }[]
@@ -493,8 +544,8 @@ export type Database = {
         Args: {
           target_user_id: string
           target_file_id: string
-          start_paragraph: number
-          end_paragraph: number
+          start_paragraph?: number
+          end_paragraph?: number
         }
         Returns: {
           id: string

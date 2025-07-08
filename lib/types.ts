@@ -7,6 +7,7 @@ export type Collection = Tables<"collections">;
 export type Tag = Tables<"tags">;
 export type ReadingSession = Tables<"reading_sessions">;
 export type FileWithProgress = Tables<"files_with_progress">;
+export type Bookmark = Tables<"bookmarks">;
 
 // Progress data as queried from the database (partial file_progress)
 export type FileProgressData = {
@@ -24,3 +25,59 @@ export type FileWithProgressData = DatabaseFile & {
 };
 
 export type LibraryFile = FileWithProgressData;
+
+// Bookmark position data types
+export type BookmarkPositionData = 
+  | {
+      type: 'text';
+      character: number;
+      paragraph?: number;
+    }
+  | {
+      type: 'audio';
+      timestamp: number;
+      end_timestamp?: number;
+    }
+  | {
+      type: 'pdf';
+      page: number;
+      x?: number;
+      y?: number;
+    };
+
+// Database function return types
+export type TextBookmarkRange = {
+  id: string;
+  title: string;
+  note: string | null;
+  paragraph_num: number;
+  character_pos: number;
+  text_preview: string | null;
+  created_at: string;
+};
+
+export type AudioBookmarkRange = {
+  id: string;
+  title: string;
+  note: string | null;
+  time_position: number;
+  end_time_position: number | null;
+  text_preview: string | null;
+  created_at: string;
+};
+
+// Extended bookmark type with typed position data
+export type BookmarkWithPosition = Omit<Bookmark, 'position_data'> & {
+  position_data: BookmarkPositionData;
+};
+
+// Bookmark creation/update types
+export type CreateBookmarkData = {
+  file_id: string;
+  title: string;
+  note?: string;
+  position_data: BookmarkPositionData;
+  text_preview?: string;
+};
+
+export type UpdateBookmarkData = Partial<Omit<CreateBookmarkData, 'file_id'>>;
