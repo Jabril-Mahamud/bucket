@@ -16,6 +16,8 @@ export type Database = {
     Tables: {
       bookmarks: {
         Row: {
+          color: string | null
+          color_index: number | null
           created_at: string | null
           file_id: string
           id: string
@@ -27,6 +29,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          color?: string | null
+          color_index?: number | null
           created_at?: string | null
           file_id: string
           id?: string
@@ -38,6 +42,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          color?: string | null
+          color_index?: number | null
           created_at?: string | null
           file_id?: string
           id?: string
@@ -537,6 +543,8 @@ export type Database = {
           time_position: number
           end_time_position: number
           text_preview: string
+          color: string
+          color_index: number
           created_at: string
         }[]
       }
@@ -554,8 +562,18 @@ export type Database = {
           paragraph_num: number
           character_pos: number
           text_preview: string
+          color: string
+          color_index: number
           created_at: string
         }[]
+      }
+      generate_bookmark_color: {
+        Args: { bookmark_id: string }
+        Returns: string
+      }
+      generate_bookmark_color_index: {
+        Args: { bookmark_id: string }
+        Returns: number
       }
       get_current_month_tts_usage: {
         Args: { target_user_id: string }
@@ -563,6 +581,20 @@ export type Database = {
           total_characters: number
           total_cost_cents: number
           current_month: string
+        }[]
+      }
+      get_file_bookmarks: {
+        Args: { target_user_id: string; target_file_id: string }
+        Returns: {
+          id: string
+          title: string
+          note: string
+          position_data: Json
+          text_preview: string
+          color: string
+          color_index: number
+          created_at: string
+          updated_at: string
         }[]
       }
       search_files: {
