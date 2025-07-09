@@ -14,6 +14,14 @@ import {
 } from "@/components/ui/context-menu";
 import { Badge } from "@/components/ui/badge";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
   ArrowLeft,
   Download,
   Volume2,
@@ -29,6 +37,9 @@ import {
   Search,
   Loader2,
   ChevronDown,
+  Bookmark,
+  BookmarkPlus,
+  List,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -36,9 +47,20 @@ import {
   FileWithProgressData,
   DatabaseFile,
   FileProgressData,
+  BookmarkPositionData,
+  CreateBookmarkData,
+  UpdateBookmarkData,
+  FileBookmark,
+  BOOKMARK_COLORS,
+  BookmarkColor,
 } from "@/lib/types";
 import { useFileProgress } from "@/hooks/useFileProgress";
+import { useBookmarks } from "@/hooks/useBookmarks";
 import { useTTS } from "@/hooks/useTTS";
+import { BookmarkDialog } from "@/components/bookmarks/bookmark-dialog";
+import { BookmarkIndicator } from "@/components/bookmarks/bookmark-indicator";
+import { BookmarkTooltip } from "@/components/bookmarks/bookmark-tooltip";
+import { BookmarksList } from "@/components/bookmarks/bookmarks-list";
 import { toast } from "sonner";
 
 // Centralized Audio State Management
@@ -64,15 +86,21 @@ const initialAudioState: AudioState = {
   fileId: null,
 };
 
-// Mobile-Optimized Audio Player
+// Mobile-Optimized Audio Player with Bookmarks
 function MobileAudioPlayer({
   audioFile,
   isVisible = true,
   onSeek,
+  bookmarks = [],
+  onCreateBookmark,
+  onBookmarkClick,
 }: {
   audioFile: FileWithProgressData | null;
   isVisible?: boolean;
   onSeek?: (seekFn: (time: number) => void) => void;
+  bookmarks?: FileBookmark[];
+  onCreateBookmark?: (timestamp: number) => void;
+  onBookmarkClick?: (bookmark: FileBookmark) => void;
 }) {
   const [state, setState] = useState<AudioState>(initialAudioState);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -244,6 +272,19 @@ function MobileAudioPlayer({
     return <Volume2 className="h-4 w-4" />;
   };
 
+  const handleProgressClick = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    seek(percentage * state.duration);
+  };
+
+  const handleCreateBookmarkAtPosition = () => {
+    if (onCreateBookmark) {
+      onCreateBookmark(state.currentTime);
+    }
+  };
+
   // Expose seek function via onSeek prop
   useEffect(() => {
     if (onSeek) {
@@ -295,19 +336,43 @@ function MobileAudioPlayer({
           </Button>
 
           <div className="flex-1 min-w-0">
-            <div
-              className="w-full bg-secondary rounded-full h-2 md:h-3 cursor-pointer touch-manipulation"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const percentage = x / rect.width;
-                seek(percentage * state.duration);
-              }}
-            >
+            {/* Progress Bar with Bookmarks */}
+            <div className="relative">
               <div
-                className="bg-primary h-full rounded-full transition-all duration-300"
-                style={{ width: `${(state.currentTime / state.duration) * 100}%` }}
-              />
+                className="w-full bg-secondary rounded-full h-2 md:h-3 cursor-pointer touch-manipulation"
+                onClick={handleProgressClick}
+              >
+                <div
+                  className="bg-primary h-full rounded-full transition-all duration-300"
+                  style={{ width: `${(state.currentTime / state.duration) * 100}%` }}
+                />
+              </div>
+              
+              {/* Bookmark Indicators */}
+              {bookmarks.map((bookmark) => {
+                const audioData = bookmark.position_data as { type: 'audio'; timestamp: number };
+                return (
+                  <BookmarkTooltip
+                    key={bookmark.id}
+                    bookmark={bookmark}
+                    onBookmarkClick={onBookmarkClick}
+                  >
+                    <div
+                      className="absolute top-0 transform -translate-x-1/2 cursor-pointer"
+                      style={{
+                        left: `${(audioData.timestamp / state.duration) * 100}%`,
+                      }}
+                    >
+                      <BookmarkIndicator
+                        color={bookmark.color}
+                        size="sm"
+                        variant="icon"
+                        className="mt-1"
+                      />
+                    </div>
+                  </BookmarkTooltip>
+                );
+              })}
             </div>
             
             <div className="flex justify-between items-center mt-1">
@@ -321,6 +386,17 @@ function MobileAudioPlayer({
           </div>
 
           <div className="flex items-center gap-1">
+            {/* Bookmark Button */}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleCreateBookmarkAtPosition}
+              className="h-8 w-8 p-0"
+              title="Add bookmark at current position"
+            >
+              <BookmarkPlus className="h-4 w-4" />
+            </Button>
+
             <div className="hidden md:flex items-center gap-1">
               <Button 
                 variant="ghost" 
@@ -392,8 +468,29 @@ function TextReader({
   const [loadingText, setLoadingText] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedText, setSelectedText] = useState<string>("");
+  const [selectedRange, setSelectedRange] = useState<{ start: number; end: number } | null>(null);
+  const [isBookmarkDialogOpen, setIsBookmarkDialogOpen] = useState(false);
+  const [bookmarkPosition, setBookmarkPosition] = useState<BookmarkPositionData | undefined>(undefined);
   
   const textContainerRef = useRef<HTMLDivElement>(null);
+
+  // Bookmarks integration
+  const {
+    bookmarks,
+    createBookmark,
+    updateBookmark,
+    deleteBookmark,
+    isLoading: bookmarksLoading,
+  } = useBookmarks({ autoLoad: true, fileId });
+
+  // Wrapper functions to match BookmarksList interface
+  const handleBookmarkUpdate = async (id: string, data: UpdateBookmarkData): Promise<void> => {
+    await updateBookmark(id, data);
+  };
+
+  const handleBookmarkDelete = async (id: string): Promise<void> => {
+    await deleteBookmark(id);
+  };
 
   useEffect(() => {
     const fetchTextContent = async () => {
@@ -419,9 +516,23 @@ function TextReader({
   const handleTextSelection = () => {
     const selection = window.getSelection();
     if (selection && selection.toString().trim()) {
-      setSelectedText(selection.toString().trim());
+      const selectedText = selection.toString().trim();
+      setSelectedText(selectedText);
+      
+      // Calculate character position for bookmark
+      if (textContainerRef.current && textContent) {
+        const range = selection.getRangeAt(0);
+        const preCaretRange = range.cloneRange();
+        preCaretRange.selectNodeContents(textContainerRef.current);
+        preCaretRange.setEnd(range.startContainer, range.startOffset);
+        const start = preCaretRange.toString().length;
+        const end = start + selectedText.length;
+        
+        setSelectedRange({ start, end });
+      }
     } else {
       setSelectedText("");
+      setSelectedRange(null);
     }
   };
 
@@ -432,17 +543,159 @@ function TextReader({
     }
   };
 
-  const renderTextContent = useCallback(() => {
+  const handleCreateBookmark = () => {
+    if (!selectedRange || !selectedText || !textContent) return;
+
+    const positionData: BookmarkPositionData = {
+      type: 'text',
+      character: selectedRange.start,
+      paragraph: calculateParagraphNumber(textContent, selectedRange.start),
+    };
+
+    setBookmarkPosition(positionData);
+    setIsBookmarkDialogOpen(true);
+  };
+
+  const calculateParagraphNumber = (content: string, position: number): number => {
+    const textBeforePosition = content.substring(0, position);
+    const paragraphs = textBeforePosition.split('\n\n');
+    return paragraphs.length;
+  };
+
+  const handleBookmarkSave = async (data: CreateBookmarkData | UpdateBookmarkData) => {
+    if ('file_id' in data) {
+      // Creating new bookmark
+      await createBookmark(data as CreateBookmarkData);
+      toast.success("Bookmark created successfully");
+    }
+    setSelectedText("");
+    setSelectedRange(null);
+  };
+
+  const handleBookmarkClick = (bookmark: FileBookmark) => {
+    if (bookmark.position_data?.type === 'text' && textContainerRef.current) {
+      const characterPos = bookmark.position_data.character;
+      // Scroll to bookmark position (simplified - you might want more sophisticated scrolling)
+      const element = textContainerRef.current;
+      element.scrollTop = (characterPos / (textContent?.length || 1)) * element.scrollHeight;
+    }
+  };
+
+  const renderTextContentWithBookmarks = useCallback(() => {
     if (!textContent) return <p className="text-muted-foreground">No text content available.</p>;
 
-    const paragraphs = textContent.split('\n\n');
+    // Get text bookmarks and sort by character position
+    const textBookmarks = bookmarks
+      .filter(bookmark => bookmark.position_data.type === 'text')
+      .sort((a, b) => {
+        const aPos = (a.position_data as any).character;
+        const bPos = (b.position_data as any).character;
+        return aPos - bPos;
+      });
 
-    return paragraphs.map((paragraph, pIndex) => (
-      <p key={pIndex} className="mb-6 last:mb-0 transition-colors duration-200" id={`paragraph-${pIndex}`}>
-        {paragraph}
-      </p>
-    ));
-  }, [textContent]);
+    if (textBookmarks.length === 0) {
+      // No bookmarks, render normally
+      const paragraphs = textContent.split('\n\n');
+      return (
+        <div className="space-y-6">
+          {paragraphs.map((paragraph, pIndex) => (
+            <p key={pIndex} className="mb-6 last:mb-0 transition-colors duration-200" id={`paragraph-${pIndex}`}>
+              {paragraph}
+            </p>
+          ))}
+        </div>
+      );
+    }
+
+    // Render text with highlighted bookmarks
+    let currentPos = 0;
+    const elements: React.ReactNode[] = [];
+    let elementKey = 0;
+
+    textBookmarks.forEach((bookmark, bookmarkIndex) => {
+      const startPos = (bookmark.position_data as any).character;
+      const endPos = startPos + (bookmark.text_preview?.length || 50); // Fallback length
+
+      // Add text before bookmark
+      if (startPos > currentPos) {
+        const textBefore = textContent.slice(currentPos, startPos);
+        elements.push(
+          <span key={`text-${elementKey++}`}>
+            {textBefore}
+          </span>
+        );
+      }
+
+      // Add highlighted bookmark text
+      const bookmarkText = textContent.slice(startPos, Math.min(endPos, textContent.length));
+      if (bookmarkText) {
+        elements.push(
+          <BookmarkTooltip
+            key={`bookmark-${bookmark.id}`}
+            bookmark={bookmark}
+            onBookmarkClick={handleBookmarkClick}
+          >
+            <span
+              className={`cursor-pointer transition-all duration-200 hover:opacity-80 px-1 py-0.5 rounded-sm bg-${bookmark.color}-100 border-b-2 border-${bookmark.color}-400 text-${bookmark.color}-900`}
+              onClick={() => handleBookmarkClick(bookmark)}
+            >
+              {bookmarkText}
+            </span>
+          </BookmarkTooltip>
+        );
+      }
+
+      currentPos = Math.max(currentPos, endPos);
+    });
+
+    // Add remaining text after last bookmark
+    if (currentPos < textContent.length) {
+      const remainingText = textContent.slice(currentPos);
+      elements.push(
+        <span key={`text-${elementKey++}`}>
+          {remainingText}
+        </span>
+      );
+    }
+
+    // Split into paragraphs while preserving highlights
+    const result: React.ReactNode[] = [];
+    let currentParagraph: React.ReactNode[] = [];
+    let paragraphKey = 0;
+
+    elements.forEach((element) => {
+      if (typeof element === 'string') {
+        const paragraphs = element.split('\n\n');
+        paragraphs.forEach((paragraph, index) => {
+          if (index > 0) {
+            // Start new paragraph
+            result.push(
+              <p key={`paragraph-${paragraphKey++}`} className="mb-6 last:mb-0 transition-colors duration-200">
+                {currentParagraph}
+              </p>
+            );
+            currentParagraph = [];
+          }
+          if (paragraph) {
+            currentParagraph.push(paragraph);
+          }
+        });
+      } else {
+        currentParagraph.push(element);
+      }
+    });
+
+    // Add final paragraph
+    if (currentParagraph.length > 0) {
+      result.push(
+        <p key={`paragraph-${paragraphKey++}`} className="mb-6 last:mb-0 transition-colors duration-200">
+          {currentParagraph}
+        </p>
+      );
+    }
+
+    return <div className="space-y-6">{result}</div>;
+  }, [textContent, bookmarks, handleBookmarkClick]);
 
   if (loadingText) {
     return (
@@ -478,80 +731,138 @@ function TextReader({
         isVisible={!!relatedAudioFile}
       />
 
-      <div className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8">
-        <div className="mb-6 space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="default" className="bg-blue-600">
-              <BookOpen className="h-3 w-3 mr-1" />
-              Text
-            </Badge>
-            {relatedAudioFile && (
-              <Badge variant="outline" className="text-emerald-600 border-emerald-600">
-                <Headphones className="h-3 w-3 mr-1" />
-                Audio Available
-              </Badge>
-            )}
-          </div>
-          
-          {!relatedAudioFile && !!(fileData.text_content || textContent) && (
-            <Button 
-              onClick={onConvertToAudio}
-              disabled={isConverting}
-              size="sm"
-              className="gap-2"
-            >
-              {isConverting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Converting...</span>
-                </>
-              ) : (
-                <>
-                  <Volume2 className="h-4 w-4" />
-                  <span>Create Audio</span>
-                </>
-              )}
-            </Button>
-          )}
-        </div>
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-8">
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Main Content */}
+          <div className="flex-1">
+            <div className="mb-6 space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="default" className="bg-blue-600">
+                  <BookOpen className="h-3 w-3 mr-1" />
+                  Text
+                </Badge>
+                {relatedAudioFile && (
+                  <Badge variant="outline" className="text-emerald-600 border-emerald-600">
+                    <Headphones className="h-3 w-3 mr-1" />
+                    Audio Available
+                  </Badge>
+                )}
+                <Badge variant="outline" className="text-amber-600 border-amber-600">
+                  <Bookmark className="h-3 w-3 mr-1" />
+                  {bookmarks.length} Bookmarks
+                </Badge>
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                {!relatedAudioFile && !!(fileData.text_content || textContent) && (
+                  <Button 
+                    onClick={onConvertToAudio}
+                    disabled={isConverting}
+                    size="sm"
+                    className="gap-2"
+                  >
+                    {isConverting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Converting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="h-4 w-4" />
+                        <span>Create Audio</span>
+                      </>
+                    )}
+                  </Button>
+                )}
 
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <div 
-              ref={textContainerRef}
-              className="prose prose-lg dark:prose-invert max-w-none min-h-[70vh] p-4 md:p-8 bg-background border rounded-lg shadow-sm cursor-text"
-              style={{
-                lineHeight: '1.8',
-                fontSize: '18px',
-                fontFamily: 'ui-serif, Georgia, serif'
-              }}
-              onMouseUp={handleTextSelection}
-              onTouchEnd={handleTextSelection}
-            >
-              {renderTextContent()}
+                {/* Bookmarks Sheet Trigger */}
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <List className="h-4 w-4" />
+                      Bookmarks ({bookmarks.length})
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-full sm:w-96">
+                    <SheetHeader>
+                      <SheetTitle>Bookmarks</SheetTitle>
+                      <SheetDescription>
+                        Manage your bookmarks for this document
+                      </SheetDescription>
+                    </SheetHeader>
+                    <div className="mt-6">
+                      <BookmarksList
+                        fileId={fileId}
+                        bookmarks={bookmarks}
+                        isLoading={bookmarksLoading}
+                        onBookmarkClick={handleBookmarkClick}
+                        onBookmarkUpdate={handleBookmarkUpdate}
+                        onBookmarkDelete={handleBookmarkDelete}
+                        onCreateBookmark={handleCreateBookmark}
+                      />
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </div>
             </div>
-          </ContextMenuTrigger>
-          
-          <ContextMenuContent className="w-56">
-            {selectedText && (
-              <>
-                <ContextMenuItem 
-                  onClick={handleCopyText}
-                  className="gap-2 cursor-pointer"
+
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <div 
+                  ref={textContainerRef}
+                  className="prose prose-lg dark:prose-invert max-w-none min-h-[70vh] p-4 md:p-8 bg-background border rounded-lg shadow-sm cursor-text"
+                  style={{
+                    lineHeight: '1.8',
+                    fontSize: '18px',
+                    fontFamily: 'ui-serif, Georgia, serif'
+                  }}
+                  onMouseUp={handleTextSelection}
+                  onTouchEnd={handleTextSelection}
                 >
-                  <Copy className="h-4 w-4" />
-                  Copy Text
+                  {renderTextContentWithBookmarks()}
+                </div>
+              </ContextMenuTrigger>
+              
+              <ContextMenuContent className="w-56">
+                {selectedText && (
+                  <>
+                    <ContextMenuItem 
+                      onClick={handleCopyText}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy Text
+                    </ContextMenuItem>
+                    <ContextMenuItem 
+                      onClick={handleCreateBookmark}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <BookmarkPlus className="h-4 w-4" />
+                      Add Bookmark
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                  </>
+                )}
+                <ContextMenuItem className="gap-2 cursor-pointer">
+                  <Search className="h-4 w-4" />
+                  Search in Document
                 </ContextMenuItem>
-                <ContextMenuSeparator />
-              </>
-            )}
-            <ContextMenuItem className="gap-2 cursor-pointer">
-              <Search className="h-4 w-4" />
-              Search in Document
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
+              </ContextMenuContent>
+            </ContextMenu>
+          </div>
+        </div>
       </div>
+
+      {/* Bookmark Creation Dialog */}
+      <BookmarkDialog
+        open={isBookmarkDialogOpen}
+        onOpenChange={setIsBookmarkDialogOpen}
+        fileId={fileId}
+        positionData={bookmarkPosition}
+        textPreview={selectedText}
+        onSave={handleBookmarkSave}
+        isLoading={false}
+      />
     </div>
   );
 }
@@ -562,6 +873,51 @@ function StandaloneAudioPlayer({
   fileData: FileWithProgressData;
 }) {
   const audioPlayerRef = useRef<{ seek: (time: number) => void }>(null);
+  const [isBookmarkDialogOpen, setIsBookmarkDialogOpen] = useState(false);
+  const [bookmarkTimestamp, setBookmarkTimestamp] = useState<number>(0);
+
+  // Bookmarks integration
+  const {
+    bookmarks,
+    createBookmark,
+    updateBookmark,
+    deleteBookmark,
+    isLoading: bookmarksLoading,
+  } = useBookmarks({ autoLoad: true, fileId: fileData.id });
+
+  // Filter audio bookmarks from all bookmarks
+  const audioBookmarks = bookmarks.filter(bookmark => 
+    bookmark.position_data.type === 'audio'
+  );
+
+  // Wrapper functions to match BookmarksList interface
+  const handleBookmarkUpdate = async (id: string, data: UpdateBookmarkData): Promise<void> => {
+    await updateBookmark(id, data);
+  };
+
+  const handleBookmarkDelete = async (id: string): Promise<void> => {
+    await deleteBookmark(id);
+  };
+
+  const handleCreateBookmark = (timestamp: number) => {
+    setBookmarkTimestamp(timestamp);
+    setIsBookmarkDialogOpen(true);
+  };
+
+  const handleBookmarkSave = async (data: CreateBookmarkData | UpdateBookmarkData) => {
+    if ('file_id' in data) {
+      // Creating new bookmark
+      await createBookmark(data as CreateBookmarkData);
+      toast.success("Bookmark created successfully");
+    }
+  };
+
+  const handleBookmarkClick = (bookmark: FileBookmark) => {
+    const audioData = bookmark.position_data as { type: 'audio'; timestamp: number };
+    if (audioData.timestamp && audioPlayerRef.current) {
+      audioPlayerRef.current.seek(audioData.timestamp);
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8">
@@ -577,12 +933,43 @@ function StandaloneAudioPlayer({
                   <div className="flex items-center gap-2">
                     Audio Player
                     <Badge variant="default" className="bg-emerald-600">Audio</Badge>
+                    <Badge variant="outline" className="text-amber-600 border-amber-600">
+                      <Bookmark className="h-3 w-3 mr-1" />
+                      {audioBookmarks.length} Bookmarks
+                    </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground font-normal">
                     {fileData.file_size ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100 : 0} MB
                   </p>
                 </div>
               </div>
+              {/* Bookmarks Sheet Trigger */}
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <List className="h-4 w-4" />
+                    Bookmarks
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-full sm:w-96">
+                  <SheetHeader>
+                    <SheetTitle>Audio Bookmarks</SheetTitle>
+                    <SheetDescription>
+                      Manage your bookmarks for this audio file
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="mt-6">
+                    <BookmarksList
+                      fileId={fileData.id}
+                      bookmarks={audioBookmarks}
+                      isLoading={bookmarksLoading}
+                      onBookmarkClick={handleBookmarkClick}
+                      onBookmarkUpdate={handleBookmarkUpdate}
+                      onBookmarkDelete={handleBookmarkDelete}
+                    />
+                  </div>
+                </SheetContent>
+              </Sheet>
             </CardTitle>
           </CardHeader>
 
@@ -590,6 +977,9 @@ function StandaloneAudioPlayer({
             <MobileAudioPlayer 
               audioFile={fileData}
               isVisible={true}
+              bookmarks={audioBookmarks}
+              onCreateBookmark={handleCreateBookmark}
+              onBookmarkClick={handleBookmarkClick}
               onSeek={(seekFn) => (audioPlayerRef.current = { seek: seekFn })}
             />
 
@@ -609,6 +999,19 @@ function StandaloneAudioPlayer({
           </CardContent>
         </Card>
       </div>
+
+      {/* Bookmark Creation Dialog */}
+      <BookmarkDialog
+        open={isBookmarkDialogOpen}
+        onOpenChange={setIsBookmarkDialogOpen}
+        fileId={fileData.id}
+        positionData={{
+          type: 'audio',
+          timestamp: bookmarkTimestamp,
+        }}
+        onSave={handleBookmarkSave}
+        isLoading={false}
+      />
     </div>
   );
 }
