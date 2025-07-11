@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, FileText } from "lucide-react";
 import { FileWithProgressData, FileBookmark } from "@/lib/types";
 import { BookmarkTooltip } from "@/components/bookmarks/bookmark-tooltip";
+import { getBookmarkHighlightClasses } from "@/lib/bookmarks/bookmark-highlight-utils";
 
 interface TextContentProps {
   fileId: string;
@@ -147,13 +148,16 @@ export function TextContent({
               );
             }
 
-            // Add highlighted bookmark text
+            // Add highlighted bookmark text with the bookmark's color
             const bookmarkText = paragraph.slice(
               relativePos,
               Math.min(endPos, paragraph.length)
             );
 
             if (bookmarkText) {
+              // Get the color-specific CSS classes
+              const highlightClasses = getBookmarkHighlightClasses(bookmark.color);
+              
               elements.push(
                 <BookmarkTooltip
                   key={`bookmark-${bookmark.id}`}
@@ -162,7 +166,7 @@ export function TextContent({
                 >
                   <span
                     data-bookmark-id={bookmark.id}
-                    className="cursor-pointer transition-all duration-200 hover:opacity-80 px-1 py-0.5 rounded-sm bg-yellow-100 border-b-2 border-yellow-400 text-yellow-900 dark:bg-yellow-800 dark:border-yellow-500 dark:text-yellow-100"
+                    className={`cursor-pointer transition-all duration-200 hover:opacity-80 px-1 py-0.5 rounded-sm border-b-2 ${highlightClasses}`}
                     onClick={() => onBookmarkClick(bookmark)}
                   >
                     {bookmarkText}

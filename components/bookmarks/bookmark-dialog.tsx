@@ -15,13 +15,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { BookmarkIndicator } from "./bookmark-indicator";
+import { BookmarkColorPicker } from "./bookmark-color-picker";
 import { 
   CreateBookmarkData, 
   UpdateBookmarkData, 
   FileBookmark,
-  BookmarkPositionData 
+  BookmarkPositionData,
+  BookmarkColor,
+  BookmarkColorIndex
 } from "@/lib/types";
-import { generateBookmarkTitle,formatBookmarkPosition } from "@/lib/bookmark-utils";
+import { generateBookmarkTitle, formatBookmarkPosition } from "@/lib/bookmark-utils";
 import { Loader2, Bookmark } from "lucide-react";
 
 interface BookmarkDialogProps {
@@ -47,6 +50,8 @@ export function BookmarkDialog({
 }: BookmarkDialogProps) {
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
+  const [selectedColor, setSelectedColor] = useState<BookmarkColor | undefined>(undefined);
+  const [selectedColorIndex, setSelectedColorIndex] = useState<BookmarkColorIndex | undefined>(undefined);
   
   const isEditing = !!bookmark;
 
@@ -55,14 +60,25 @@ export function BookmarkDialog({
     if (isEditing && bookmark) {
       setTitle(bookmark.title);
       setNote(bookmark.note || "");
+      setSelectedColor(bookmark.color);
+      setSelectedColorIndex(bookmark.color_index);
     } else if (textPreview) {
       setTitle(generateBookmarkTitle(textPreview));
       setNote("");
+      setSelectedColor(undefined); // Let the database auto-assign
+      setSelectedColorIndex(undefined);
     } else {
       setTitle("");
       setNote("");
+      setSelectedColor(undefined);
+      setSelectedColorIndex(undefined);
     }
   }, [isEditing, bookmark, textPreview]);
+
+  const handleColorChange = (color: BookmarkColor, colorIndex: BookmarkColorIndex) => {
+    setSelectedColor(color);
+    setSelectedColorIndex(colorIndex);
+  };
 
   const handleSave = async () => {
     if (!title.trim()) return;
@@ -72,6 +88,7 @@ export function BookmarkDialog({
         await onSave({
           title: title.trim(),
           note: note.trim() || undefined,
+          color: selectedColor,
         });
       } else {
         if (!positionData) return;
@@ -82,6 +99,7 @@ export function BookmarkDialog({
           note: note.trim() || undefined,
           position_data: positionData,
           text_preview: textPreview,
+          color: selectedColor, // Include the selected color
         });
       }
       
@@ -165,6 +183,12 @@ export function BookmarkDialog({
               maxLength={500}
             />
           </div>
+
+          {/* Color Picker */}
+          <BookmarkColorPicker
+            selectedColor={selectedColor}
+            onColorChange={handleColorChange}
+          />
         </div>
 
         <DialogFooter>
