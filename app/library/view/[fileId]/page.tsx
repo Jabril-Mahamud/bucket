@@ -1,3 +1,4 @@
+// app/library/view/[fileId]/page.tsx
 import { FileViewer } from "@/components/file/file-viewer";
 
 interface PageProps {
@@ -8,8 +9,8 @@ export default async function Page({ params }: PageProps) {
   const { fileId } = await params;
 
   return (
-    <div className="p-6">
-      <FileViewer fileId={fileId} />;
+    <div className="min-h-screen">
+      <FileViewer fileId={fileId} />
     </div>
   );
 }

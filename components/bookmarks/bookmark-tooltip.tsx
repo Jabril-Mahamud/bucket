@@ -2,7 +2,6 @@
 "use client";
 
 import { FileBookmark } from "@/lib/types";
-import { formatBookmarkPosition } from "@/lib/bookmark-utils";
 import {
   Tooltip,
   TooltipContent,
