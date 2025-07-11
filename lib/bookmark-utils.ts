@@ -52,11 +52,12 @@ export function formatBookmarkPosition(positionData: BookmarkPositionData): stri
         ? `Paragraph ${positionData.paragraph}, Character ${positionData.character}`
         : `Character ${positionData.character}`;
     case 'audio':
-      if (positionData.end_timestamp !== undefined) {
-        const duration = positionData.end_timestamp - positionData.timestamp;
-        return `${formatAudioTime(positionData.timestamp)} - ${formatAudioTime(positionData.end_timestamp)} (${Math.round(duration)}s section)`;
+      const audioData = positionData as { timestamp: number; end_timestamp?: number };
+      if (audioData.end_timestamp !== undefined) {
+        const duration = audioData.end_timestamp - audioData.timestamp;
+        return `${formatAudioTime(audioData.timestamp)} - ${formatAudioTime(audioData.end_timestamp)} (${Math.round(duration)}s section)`;
       } else {
-        return `${formatAudioTime(positionData.timestamp)}`;
+        return `${formatAudioTime(audioData.timestamp)}`;
       }
     case 'pdf':
       return `Page ${positionData.page}`;
@@ -69,6 +70,10 @@ export function formatBookmarkPosition(positionData: BookmarkPositionData): stri
  * Format audio time in MM:SS format
  */
 export function formatAudioTime(seconds: number): string {
+  if (isNaN(seconds) || seconds < 0) {
+    return '0:00';
+  }
+  
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = Math.floor(seconds % 60);
@@ -83,6 +88,10 @@ export function formatAudioTime(seconds: number): string {
  * Format audio duration in a human-readable way
  */
 export function formatAudioDuration(seconds: number): string {
+  if (isNaN(seconds) || seconds <= 0) {
+    return '0s';
+  }
+  
   if (seconds < 60) {
     return `${Math.round(seconds)}s`;
   } else if (seconds < 3600) {
@@ -100,7 +109,9 @@ export function formatAudioDuration(seconds: number): string {
  * Create a bookmark title from text content
  */
 export function generateBookmarkTitle(textPreview: string, maxLength: number = 50): string {
-  if (!textPreview) return 'New Bookmark';
+  if (!textPreview || textPreview.trim().length === 0) {
+    return 'New Bookmark';
+  }
   
   // Clean up the text
   const cleaned = textPreview.replace(/\s+/g, ' ').trim();
@@ -122,7 +133,11 @@ export function generateBookmarkTitle(textPreview: string, maxLength: number = 5
  * Generate a title for audio bookmarks
  */
 export function generateAudioBookmarkTitle(startTime: number, endTime?: number): string {
-  if (endTime !== undefined) {
+  if (isNaN(startTime) || startTime < 0) {
+    return 'Audio Bookmark';
+  }
+  
+  if (endTime !== undefined && !isNaN(endTime) && endTime > startTime) {
     const duration = endTime - startTime;
     return `${formatAudioDuration(duration)} section at ${formatAudioTime(startTime)}`;
   } else {
@@ -134,7 +149,11 @@ export function generateAudioBookmarkTitle(startTime: number, endTime?: number):
  * Generate preview text for audio bookmarks
  */
 export function generateAudioBookmarkPreview(startTime: number, endTime?: number): string {
-  if (endTime !== undefined) {
+  if (isNaN(startTime) || startTime < 0) {
+    return 'Audio bookmark';
+  }
+  
+  if (endTime !== undefined && !isNaN(endTime) && endTime > startTime) {
     const duration = endTime - startTime;
     return `Audio section from ${formatAudioTime(startTime)} to ${formatAudioTime(endTime)} (${formatAudioDuration(duration)})`;
   } else {

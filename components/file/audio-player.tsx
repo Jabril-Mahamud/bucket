@@ -68,6 +68,12 @@ export function AudioPlayer({
   const audioRef = useRef<HTMLAudioElement>(null);
   const { updateProgress, updateProgressImmediate } = useFileProgress();
 
+  // Debug logging
+  useEffect(() => {
+    console.log('AudioPlayer bookmarks:', bookmarks);
+    console.log('AudioPlayer onCreateBookmark:', onCreateBookmark);
+  }, [bookmarks, onCreateBookmark]);
+
   useEffect(() => {
     setState(initialAudioState);
   }, [audioFile?.id]);
@@ -267,19 +273,26 @@ export function AudioPlayer({
   };
 
   const handleProgressClick = (e: React.MouseEvent) => {
+    if (state.duration === 0) return;
+    
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const percentage = x / rect.width;
     const clickTime = percentage * state.duration;
     
+    console.log('Progress click:', { clickTime, isSelectingRange, rangeStart });
+    
     if (isSelectingRange && rangeStart === null) {
       // First click - set start time
       setRangeStart(clickTime);
+      console.log('Set range start:', clickTime);
     } else if (isSelectingRange && rangeStart !== null) {
       // Second click - set end time and create range bookmark
       const endTime = clickTime;
       const startTime = Math.min(rangeStart, endTime);
       const finalEndTime = Math.max(rangeStart, endTime);
+      
+      console.log('Creating range bookmark:', { startTime, finalEndTime });
       
       if (onCreateBookmark) {
         onCreateBookmark(startTime, finalEndTime);
@@ -295,19 +308,33 @@ export function AudioPlayer({
   };
 
   const handleCreateTimestampBookmark = () => {
-    if (onCreateBookmark) {
+    console.log('Creating timestamp bookmark at:', state.currentTime);
+    if (onCreateBookmark && state.currentTime >= 0) {
       onCreateBookmark(state.currentTime);
+    } else {
+      console.warn('Cannot create bookmark: onCreateBookmark missing or invalid time');
     }
   };
 
   const handleStartRangeSelection = () => {
+    console.log('Starting range selection');
     setIsSelectingRange(true);
     setRangeStart(null);
   };
 
   const handleCancelRangeSelection = () => {
+    console.log('Canceling range selection');
     setIsSelectingRange(false);
     setRangeStart(null);
+  };
+
+  const handleBookmarkClick = (bookmark: FileBookmark) => {
+    console.log('Bookmark clicked:', bookmark);
+    if (bookmark.position_data.type === 'audio') {
+      const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
+      seek(audioData.timestamp);
+    }
+    onBookmarkClick?.(bookmark);
   };
 
   // Expose seek function via onSeek prop
@@ -338,15 +365,26 @@ export function AudioPlayer({
     );
   }
 
+  // Filter bookmarks for audio
+  const audioBookmarks = bookmarks.filter(bookmark => 
+    bookmark.position_data.type === 'audio'
+  );
+
   // Get range bookmarks for visual representation
-  const rangeBookmarks = bookmarks.filter(bookmark => {
-    const audioData = bookmark.position_data as { type: "audio"; timestamp: number; end_timestamp?: number };
+  const rangeBookmarks = audioBookmarks.filter(bookmark => {
+    const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
     return audioData.end_timestamp !== undefined;
   });
 
-  const pointBookmarks = bookmarks.filter(bookmark => {
-    const audioData = bookmark.position_data as { type: "audio"; timestamp: number; end_timestamp?: number };
+  const pointBookmarks = audioBookmarks.filter(bookmark => {
+    const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
     return audioData.end_timestamp === undefined;
+  });
+
+  console.log('Rendering bookmarks:', { 
+    audioBookmarks: audioBookmarks.length, 
+    rangeBookmarks: rangeBookmarks.length, 
+    pointBookmarks: pointBookmarks.length 
   });
 
   return (
@@ -374,21 +412,21 @@ export function AudioPlayer({
             {/* Progress Bar with Bookmarks */}
             <div className="relative">
               <div
-                className={`w-full bg-secondary rounded-full h-2 md:h-3 cursor-pointer touch-manipulation ${
+                className={`w-full bg-secondary rounded-full h-2 md:h-3 cursor-pointer touch-manipulation relative ${
                   isSelectingRange ? 'ring-2 ring-primary ring-offset-2' : ''
                 }`}
                 onClick={handleProgressClick}
               >
                 {/* Main progress */}
                 <div
-                  className="bg-primary h-full rounded-full transition-all duration-300"
+                  className="bg-primary h-full rounded-full transition-all duration-300 relative z-10"
                   style={{
-                    width: `${(state.currentTime / state.duration) * 100}%`,
+                    width: `${state.duration > 0 ? (state.currentTime / state.duration) * 100 : 0}%`,
                   }}
                 />
 
                 {/* Range bookmark backgrounds */}
-                {rangeBookmarks.map((bookmark) => {
+                {state.duration > 0 && rangeBookmarks.map((bookmark) => {
                   const audioData = bookmark.position_data as {
                     type: "audio";
                     timestamp: number;
@@ -400,20 +438,20 @@ export function AudioPlayer({
                   return (
                     <div
                       key={`range-${bookmark.id}`}
-                      className="absolute top-0 h-full rounded-full opacity-30"
+                      className="absolute top-0 h-full rounded-full opacity-30 z-0"
                       style={{
                         left: `${startPercent}%`,
                         width: `${endPercent - startPercent}%`,
-                        backgroundColor: `var(--${bookmark.color}-500)`,
+                        backgroundColor: `hsl(var(--${bookmark.color}-500))`,
                       }}
                     />
                   );
                 })}
 
                 {/* Range selection preview */}
-                {isSelectingRange && rangeStart !== null && (
+                {isSelectingRange && rangeStart !== null && state.duration > 0 && (
                   <div
-                    className="absolute top-0 h-full bg-primary/40 rounded-full"
+                    className="absolute top-0 h-full bg-primary/40 rounded-full z-5"
                     style={{
                       left: `${Math.min((rangeStart / state.duration) * 100, (state.currentTime / state.duration) * 100)}%`,
                       width: `${Math.abs((state.currentTime - rangeStart) / state.duration) * 100}%`,
@@ -423,23 +461,23 @@ export function AudioPlayer({
               </div>
 
               {/* Point Bookmark Indicators */}
-              {pointBookmarks.map((bookmark) => {
+              {state.duration > 0 && pointBookmarks.map((bookmark) => {
                 const audioData = bookmark.position_data as {
                   type: "audio";
                   timestamp: number;
                 };
+                const leftPercent = (audioData.timestamp / state.duration) * 100;
+                
                 return (
                   <BookmarkTooltip
                     key={bookmark.id}
                     bookmark={bookmark}
-                    onBookmarkClick={onBookmarkClick}
+                    onBookmarkClick={handleBookmarkClick}
                   >
                     <div
-                      className="absolute top-0 transform -translate-x-1/2 cursor-pointer"
+                      className="absolute top-0 transform -translate-x-1/2 cursor-pointer z-20"
                       style={{
-                        left: `${
-                          (audioData.timestamp / state.duration) * 100
-                        }%`,
+                        left: `${leftPercent}%`,
                       }}
                     >
                       <BookmarkIndicator
@@ -454,24 +492,24 @@ export function AudioPlayer({
               })}
 
               {/* Range bookmark start/end indicators */}
-              {rangeBookmarks.map((bookmark) => {
+              {state.duration > 0 && rangeBookmarks.map((bookmark) => {
                 const audioData = bookmark.position_data as {
                   type: "audio";
                   timestamp: number;
                   end_timestamp: number;
                 };
+                const leftPercent = (audioData.timestamp / state.duration) * 100;
+                
                 return (
                   <BookmarkTooltip
                     key={`range-indicator-${bookmark.id}`}
                     bookmark={bookmark}
-                    onBookmarkClick={onBookmarkClick}
+                    onBookmarkClick={handleBookmarkClick}
                   >
                     <div
-                      className="absolute top-0 transform -translate-x-1/2 cursor-pointer"
+                      className="absolute top-0 transform -translate-x-1/2 cursor-pointer z-20"
                       style={{
-                        left: `${
-                          (audioData.timestamp / state.duration) * 100
-                        }%`,
+                        left: `${leftPercent}%`,
                       }}
                     >
                       <div className="flex items-center">
@@ -489,9 +527,9 @@ export function AudioPlayer({
               })}
 
               {/* Range selection start indicator */}
-              {isSelectingRange && rangeStart !== null && (
+              {isSelectingRange && rangeStart !== null && state.duration > 0 && (
                 <div
-                  className="absolute top-0 transform -translate-x-1/2"
+                  className="absolute top-0 transform -translate-x-1/2 z-20"
                   style={{
                     left: `${(rangeStart / state.duration) * 100}%`,
                   }}
@@ -533,13 +571,19 @@ export function AudioPlayer({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleCreateTimestampBookmark}>
+                <DropdownMenuItem 
+                  onClick={handleCreateTimestampBookmark}
+                  disabled={state.currentTime < 0 || !onCreateBookmark}
+                >
                   <Clock className="mr-2 h-4 w-4" />
                   Bookmark Current Time
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {!isSelectingRange ? (
-                  <DropdownMenuItem onClick={handleStartRangeSelection}>
+                  <DropdownMenuItem 
+                    onClick={handleStartRangeSelection}
+                    disabled={!onCreateBookmark}
+                  >
                     <Scissors className="mr-2 h-4 w-4" />
                     Select Time Range
                   </DropdownMenuItem>

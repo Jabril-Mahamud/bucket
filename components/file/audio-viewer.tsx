@@ -1,7 +1,7 @@
 // components/file/audio-viewer.tsx
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ interface AudioViewerProps {
 }
 
 export function AudioViewer({ fileData }: AudioViewerProps) {
-  const audioPlayerRef = useRef<{ seek: (time: number) => void }>(null);
+  const audioPlayerRef = useRef<{ seek: (time: number) => void } | null>(null);
   const [isBookmarkDialogOpen, setIsBookmarkDialogOpen] = useState(false);
   const [bookmarkTimestamp, setBookmarkTimestamp] = useState<number>(0);
   const [bookmarkEndTimestamp, setBookmarkEndTimestamp] = useState<number | undefined>(undefined);
@@ -48,10 +48,16 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
     isLoading: bookmarksLoading,
   } = useBookmarks({ autoLoad: true, fileId: fileData.id });
 
+  // Debug logging
+  console.log('AudioViewer - bookmarks loaded:', bookmarks.length);
+  console.log('AudioViewer - file ID:', fileData.id);
+
   // Filter audio bookmarks
   const audioBookmarks = bookmarks.filter(
     (bookmark): bookmark is FileBookmark => bookmark.position_data.type === "audio"
   );
+
+  console.log('AudioViewer - audio bookmarks:', audioBookmarks.length);
 
   const handleBookmarkUpdate = async (id: string, data: UpdateBookmarkData): Promise<void> => {
     await updateBookmark(id, data);
@@ -84,22 +90,32 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
     }
   };
 
-  const handleCreateBookmark = (timestamp: number, endTimestamp?: number) => {
+  const handleCreateBookmark = useCallback((timestamp: number, endTimestamp?: number) => {
+    console.log('AudioViewer - Creating bookmark:', { timestamp, endTimestamp });
+    
     setBookmarkTimestamp(timestamp);
     setBookmarkEndTimestamp(endTimestamp);
     setBookmarkTextPreview(generateBookmarkPreview(timestamp, endTimestamp));
     setIsBookmarkDialogOpen(true);
-  };
+  }, []);
 
   const handleBookmarkSave = async (data: CreateBookmarkData | UpdateBookmarkData) => {
+    console.log('AudioViewer - Saving bookmark:', data);
+    
     if ("file_id" in data) {
       // This is a creation scenario
-      await createBookmark(data as CreateBookmarkData);
-      
-      if (bookmarkEndTimestamp !== undefined) {
-        toast.success("Audio section bookmark created successfully");
-      } else {
-        toast.success("Audio bookmark created successfully");
+      try {
+        const result = await createBookmark(data as CreateBookmarkData);
+        console.log('AudioViewer - Bookmark created:', result);
+        
+        if (bookmarkEndTimestamp !== undefined) {
+          toast.success("Audio section bookmark created successfully");
+        } else {
+          toast.success("Audio bookmark created successfully");
+        }
+      } catch (error) {
+        console.error('AudioViewer - Error creating bookmark:', error);
+        toast.error("Failed to create bookmark");
       }
     } else {
       // This is an update scenario (though not used in this component's current flow)
@@ -107,12 +123,15 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
     }
   };
 
-  const handleBookmarkClick = (bookmark: FileBookmark) => {
+  const handleBookmarkClick = useCallback((bookmark: FileBookmark) => {
+    console.log('AudioViewer - Bookmark clicked:', bookmark);
+    
     const audioData = bookmark.position_data as BookmarkPositionData;
-    if (audioData.type === "audio" && audioData.timestamp && audioPlayerRef.current) {
+    if (audioData.type === "audio" && "timestamp" in audioData && audioPlayerRef.current) {
+      console.log('AudioViewer - Seeking to:', audioData.timestamp);
       audioPlayerRef.current.seek(audioData.timestamp);
     }
-  };
+  }, []);
 
   // Generate position data for the bookmark
   const getBookmarkPositionData = (): BookmarkPositionData => {
@@ -140,6 +159,10 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
     const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
     return audioData.end_timestamp !== undefined;
   });
+
+  const handleSeekCallback = useCallback((seekFn: (time: number) => void) => {
+    audioPlayerRef.current = { seek: seekFn };
+  }, []);
 
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8">
@@ -218,7 +241,7 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
               bookmarks={audioBookmarks}
               onCreateBookmark={handleCreateBookmark}
               onBookmarkClick={handleBookmarkClick}
-              onSeek={(seekFn) => (audioPlayerRef.current = { seek: seekFn })}
+              onSeek={handleSeekCallback}
             />
 
             {fileData.progress && fileData.progress.progress_percentage > 0 && (
