@@ -40,6 +40,8 @@ import {
   Bookmark,
   BookmarkPlus,
   List,
+  Trash2,
+  Edit,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -51,8 +53,6 @@ import {
   CreateBookmarkData,
   UpdateBookmarkData,
   FileBookmark,
-  BOOKMARK_COLORS,
-  BookmarkColor,
 } from "@/lib/types";
 import { useFileProgress } from "@/hooks/useFileProgress";
 import { useBookmarks } from "@/hooks/useBookmarks";
@@ -112,24 +112,33 @@ function MobileAudioPlayer({
 
   useEffect(() => {
     if (!audioFile || !audioRef.current) {
-      setState(prev => ({ ...prev, isLoading: false, error: null }));
+      setState((prev) => ({ ...prev, isLoading: false, error: null }));
       return;
     }
 
     const audio = audioRef.current;
-    setState(prev => ({ ...prev, isLoading: true, error: null, fileId: audioFile.id }));
+    setState((prev) => ({
+      ...prev,
+      isLoading: true,
+      error: null,
+      fileId: audioFile.id,
+    }));
 
     const timeout = setTimeout(() => {
-      setState(prev => prev.isLoading ? { 
-        ...prev, 
-        isLoading: false, 
-        error: "Audio loading timed out" 
-      } : prev);
+      setState((prev) =>
+        prev.isLoading
+          ? {
+              ...prev,
+              isLoading: false,
+              error: "Audio loading timed out",
+            }
+          : prev
+      );
     }, 15000);
 
     const handleLoadedMetadata = () => {
       clearTimeout(timeout);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         isLoading: false,
         duration: audio.duration,
@@ -140,32 +149,41 @@ function MobileAudioPlayer({
         const lastTime = parseFloat(audioFile.progress.last_position);
         if (lastTime > 0 && lastTime < audio.duration) {
           audio.currentTime = lastTime;
-          setState(prev => ({ ...prev, currentTime: lastTime }));
+          setState((prev) => ({ ...prev, currentTime: lastTime }));
         }
       }
     };
 
     const handleTimeUpdate = () => {
-      setState(prev => ({ ...prev, currentTime: audio.currentTime }));
-      
+      setState((prev) => ({ ...prev, currentTime: audio.currentTime }));
+
       if (Math.floor(audio.currentTime) % 10 === 0) {
         const progressPercentage = (audio.currentTime / audio.duration) * 100;
-        updateProgress(audioFile.id, progressPercentage, audio.currentTime.toString());
+        updateProgress(
+          audioFile.id,
+          progressPercentage,
+          audio.currentTime.toString()
+        );
       }
     };
 
-    const handlePlay = () => setState(prev => ({ ...prev, isPlaying: true }));
-    const handlePause = () => setState(prev => ({ ...prev, isPlaying: false }));
-    
+    const handlePlay = () => setState((prev) => ({ ...prev, isPlaying: true }));
+    const handlePause = () =>
+      setState((prev) => ({ ...prev, isPlaying: false }));
+
     const handleEnded = () => {
-      setState(prev => ({ ...prev, isPlaying: false }));
+      setState((prev) => ({ ...prev, isPlaying: false }));
       const progressPercentage = (audio.duration / audio.duration) * 100;
-      updateProgressImmediate(audioFile.id, progressPercentage, audio.duration.toString());
+      updateProgressImmediate(
+        audioFile.id,
+        progressPercentage,
+        audio.duration.toString()
+      );
     };
 
     const handleError = () => {
       clearTimeout(timeout);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         isLoading: false,
         isPlaying: false,
@@ -175,31 +193,31 @@ function MobileAudioPlayer({
 
     const handleCanPlay = () => {
       clearTimeout(timeout);
-      setState(prev => ({ ...prev, isLoading: false, error: null }));
+      setState((prev) => ({ ...prev, isLoading: false, error: null }));
     };
 
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('play', handlePlay);
-    audio.addEventListener('pause', handlePause);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('error', handleError);
-    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("error", handleError);
+    audio.addEventListener("canplay", handleCanPlay);
 
     audio.src = `/api/files/${audioFile.id}`;
     audio.load();
 
     return () => {
       clearTimeout(timeout);
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('play', handlePlay);
-      audio.removeEventListener('pause', handlePause);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('error', handleError);
-      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("error", handleError);
+      audio.removeEventListener("canplay", handleCanPlay);
       audio.pause();
-      audio.src = '';
+      audio.src = "";
     };
   }, [audioFile, updateProgress, updateProgressImmediate]);
 
@@ -213,38 +231,51 @@ function MobileAudioPlayer({
         await audioRef.current.play();
       }
     } catch (err) {
-      console.error('Playback error:', err);
-      setState(prev => ({ 
-        ...prev, 
+      console.error("Playback error:", err);
+      setState((prev) => ({
+        ...prev,
         error: "Playback failed",
-        isPlaying: false 
+        isPlaying: false,
       }));
     }
   };
 
-  const seek = useCallback((time: number) => {
-    if (!audioRef.current) return;
-    audioRef.current.currentTime = time;
-    setState(prev => ({ ...prev, currentTime: time }));
-    
-    if (audioFile) {
-      const progressPercentage = (time / state.duration) * 100;
-      updateProgressImmediate(audioFile.id, progressPercentage, time.toString());
-    }
-  }, [audioFile, state.duration, updateProgressImmediate]);
+  const seek = useCallback(
+    (time: number) => {
+      if (!audioRef.current) return;
+      audioRef.current.currentTime = time;
+      setState((prev) => ({ ...prev, currentTime: time }));
 
-  const skip = useCallback((seconds: number) => {
-    const newTime = Math.max(0, Math.min(state.duration, state.currentTime + seconds));
-    seek(newTime);
-  }, [state.duration, state.currentTime, seek]);
+      if (audioFile) {
+        const progressPercentage = (time / state.duration) * 100;
+        updateProgressImmediate(
+          audioFile.id,
+          progressPercentage,
+          time.toString()
+        );
+      }
+    },
+    [audioFile, state.duration, updateProgressImmediate]
+  );
+
+  const skip = useCallback(
+    (seconds: number) => {
+      const newTime = Math.max(
+        0,
+        Math.min(state.duration, state.currentTime + seconds)
+      );
+      seek(newTime);
+    },
+    [state.duration, state.currentTime, seek]
+  );
 
   const handleVolumeChange = (newVolume: number) => {
     if (!audioRef.current) return;
     audioRef.current.volume = newVolume;
-    setState(prev => ({ 
-      ...prev, 
-      volume: newVolume, 
-      isMuted: newVolume === 0 
+    setState((prev) => ({
+      ...prev,
+      volume: newVolume,
+      isMuted: newVolume === 0,
     }));
   };
 
@@ -252,7 +283,7 @@ function MobileAudioPlayer({
     if (!audioRef.current) return;
     const newMuted = !state.isMuted;
     audioRef.current.volume = newMuted ? 0 : state.volume;
-    setState(prev => ({ ...prev, isMuted: newMuted }));
+    setState((prev) => ({ ...prev, isMuted: newMuted }));
   };
 
   const formatTime = (time: number) => {
@@ -261,13 +292,16 @@ function MobileAudioPlayer({
     const seconds = Math.floor(time % 60);
 
     if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+        .toString()
+        .padStart(2, "0")}`;
     }
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   const getVolumeIcon = () => {
-    if (state.isMuted || state.volume === 0) return <VolumeX className="h-4 w-4" />;
+    if (state.isMuted || state.volume === 0)
+      return <VolumeX className="h-4 w-4" />;
     if (state.volume < 0.5) return <Volume1 className="h-4 w-4" />;
     return <Volume2 className="h-4 w-4" />;
   };
@@ -302,10 +336,12 @@ function MobileAudioPlayer({
             <Headphones className="h-4 w-4" />
             <span>Audio Error: {state.error}</span>
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setState(prev => ({ ...prev, error: null, isLoading: true }))}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              setState((prev) => ({ ...prev, error: null, isLoading: true }))
+            }
           >
             Retry
           </Button>
@@ -317,7 +353,7 @@ function MobileAudioPlayer({
   return (
     <div className="bg-background border-b border-border sticky top-0 z-10">
       <audio ref={audioRef} preload="metadata" />
-      
+
       <div className="max-w-4xl mx-auto p-3 md:p-4">
         <div className="flex items-center gap-2 md:gap-4">
           <Button
@@ -344,13 +380,18 @@ function MobileAudioPlayer({
               >
                 <div
                   className="bg-primary h-full rounded-full transition-all duration-300"
-                  style={{ width: `${(state.currentTime / state.duration) * 100}%` }}
+                  style={{
+                    width: `${(state.currentTime / state.duration) * 100}%`,
+                  }}
                 />
               </div>
-              
+
               {/* Bookmark Indicators */}
               {bookmarks.map((bookmark) => {
-                const audioData = bookmark.position_data as { type: 'audio'; timestamp: number };
+                const audioData = bookmark.position_data as {
+                  type: "audio";
+                  timestamp: number;
+                };
                 return (
                   <BookmarkTooltip
                     key={bookmark.id}
@@ -360,7 +401,9 @@ function MobileAudioPlayer({
                     <div
                       className="absolute top-0 transform -translate-x-1/2 cursor-pointer"
                       style={{
-                        left: `${(audioData.timestamp / state.duration) * 100}%`,
+                        left: `${
+                          (audioData.timestamp / state.duration) * 100
+                        }%`,
                       }}
                     >
                       <BookmarkIndicator
@@ -374,7 +417,7 @@ function MobileAudioPlayer({
                 );
               })}
             </div>
-            
+
             <div className="flex justify-between items-center mt-1">
               <span className="text-xs text-muted-foreground">
                 {formatTime(state.currentTime)}
@@ -387,9 +430,9 @@ function MobileAudioPlayer({
 
           <div className="flex items-center gap-1">
             {/* Bookmark Button */}
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleCreateBookmarkAtPosition}
               className="h-8 w-8 p-0"
               title="Add bookmark at current position"
@@ -398,17 +441,17 @@ function MobileAudioPlayer({
             </Button>
 
             <div className="hidden md:flex items-center gap-1">
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => skip(-10)}
                 className="h-8 px-2 text-xs"
               >
                 -10s
               </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => skip(10)}
                 className="h-8 px-2 text-xs"
               >
@@ -417,7 +460,12 @@ function MobileAudioPlayer({
             </div>
 
             <div className="hidden md:flex items-center gap-2 w-20">
-              <Button variant="ghost" size="sm" onClick={toggleMute} className="h-8 w-8 p-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleMute}
+                className="h-8 w-8 p-0"
+              >
                 {getVolumeIcon()}
               </Button>
               <div
@@ -431,7 +479,9 @@ function MobileAudioPlayer({
               >
                 <div
                   className="bg-primary h-full rounded-full transition-all"
-                  style={{ width: `${state.isMuted ? 0 : state.volume * 100}%` }}
+                  style={{
+                    width: `${state.isMuted ? 0 : state.volume * 100}%`,
+                  }}
                 />
               </div>
             </div>
@@ -468,10 +518,22 @@ function TextReader({
   const [loadingText, setLoadingText] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedText, setSelectedText] = useState<string>("");
-  const [selectedRange, setSelectedRange] = useState<{ start: number; end: number } | null>(null);
+  const [selectedRange, setSelectedRange] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
   const [isBookmarkDialogOpen, setIsBookmarkDialogOpen] = useState(false);
-  const [bookmarkPosition, setBookmarkPosition] = useState<BookmarkPositionData | undefined>(undefined);
-  
+  const [bookmarkPosition, setBookmarkPosition] = useState<
+    BookmarkPositionData | undefined
+  >(undefined);
+  const [isBookmarksSheetOpen, setIsBookmarksSheetOpen] = useState(false);
+  const [clickedBookmark, setClickedBookmark] = useState<
+    FileBookmark | undefined
+  >(undefined);
+  const [editingBookmark, setEditingBookmark] = useState<
+    FileBookmark | undefined
+  >(undefined);
+
   const textContainerRef = useRef<HTMLDivElement>(null);
 
   // Bookmarks integration
@@ -484,7 +546,10 @@ function TextReader({
   } = useBookmarks({ autoLoad: true, fileId });
 
   // Wrapper functions to match BookmarksList interface
-  const handleBookmarkUpdate = async (id: string, data: UpdateBookmarkData): Promise<void> => {
+  const handleBookmarkUpdate = async (
+    id: string,
+    data: UpdateBookmarkData
+  ): Promise<void> => {
     await updateBookmark(id, data);
   };
 
@@ -518,7 +583,7 @@ function TextReader({
     if (selection && selection.toString().trim()) {
       const selectedText = selection.toString().trim();
       setSelectedText(selectedText);
-      
+
       // Calculate character position for bookmark
       if (textContainerRef.current && textContent) {
         const range = selection.getRangeAt(0);
@@ -527,7 +592,7 @@ function TextReader({
         preCaretRange.setEnd(range.startContainer, range.startOffset);
         const start = preCaretRange.toString().length;
         const end = start + selectedText.length;
-        
+
         setSelectedRange({ start, end });
       }
     } else {
@@ -547,59 +612,123 @@ function TextReader({
     if (!selectedRange || !selectedText || !textContent) return;
 
     const positionData: BookmarkPositionData = {
-      type: 'text',
+      type: "text",
       character: selectedRange.start,
       paragraph: calculateParagraphNumber(textContent, selectedRange.start),
     };
 
     setBookmarkPosition(positionData);
+    setEditingBookmark(undefined);
     setIsBookmarkDialogOpen(true);
   };
 
-  const calculateParagraphNumber = (content: string, position: number): number => {
+  const calculateParagraphNumber = (
+    content: string,
+    position: number
+  ): number => {
     const textBeforePosition = content.substring(0, position);
-    const paragraphs = textBeforePosition.split('\n\n');
+    const paragraphs = textBeforePosition.split("\n\n");
     return paragraphs.length;
   };
 
-  const handleBookmarkSave = async (data: CreateBookmarkData | UpdateBookmarkData) => {
-    if ('file_id' in data) {
+  const handleBookmarkSave = async (
+    data: CreateBookmarkData | UpdateBookmarkData
+  ) => {
+    if ("file_id" in data) {
       // Creating new bookmark
       await createBookmark(data as CreateBookmarkData);
       toast.success("Bookmark created successfully");
+    } else {
+      // Updating existing bookmark
+      if (editingBookmark) {
+        await updateBookmark(editingBookmark.id, data);
+        toast.success("Bookmark updated successfully");
+      }
     }
     setSelectedText("");
     setSelectedRange(null);
+    setEditingBookmark(undefined);
   };
 
-  const handleBookmarkClick = (bookmark: FileBookmark) => {
-    if (bookmark.position_data?.type === 'text' && textContainerRef.current) {
-      const characterPos = bookmark.position_data.character;
-      // Scroll to bookmark position (simplified - you might want more sophisticated scrolling)
-      const element = textContainerRef.current;
-      element.scrollTop = (characterPos / (textContent?.length || 1)) * element.scrollHeight;
+  const handleBookmarkClick = useCallback(
+    (bookmark: FileBookmark) => {
+      if (bookmark.position_data?.type === "text" && textContainerRef.current) {
+        const characterPos = bookmark.position_data.character;
+        // Scroll to bookmark position (simplified - you might want more sophisticated scrolling)
+        const element = textContainerRef.current;
+        element.scrollTop =
+          (characterPos / (textContent?.length || 1)) * element.scrollHeight;
+      }
+    },
+    [textContent]
+  );
+
+  // Helper function to find bookmark at current click position
+  const findBookmarkAtPosition = (
+    clientX: number,
+    clientY: number
+  ): FileBookmark | undefined => {
+    const element = document.elementFromPoint(clientX, clientY);
+    if (!element) return undefined;
+
+    // Check if the clicked element or its parent has bookmark data
+    let currentElement = element as HTMLElement;
+    while (currentElement && currentElement !== textContainerRef.current) {
+      const bookmarkId = currentElement.getAttribute("data-bookmark-id");
+      if (bookmarkId) {
+        return bookmarks.find((b) => b.id === bookmarkId);
+      }
+      currentElement = currentElement.parentElement as HTMLElement;
+    }
+    return undefined;
+  };
+
+  const handleEditBookmark = (bookmark: FileBookmark) => {
+    setEditingBookmark(bookmark);
+    setBookmarkPosition(bookmark.position_data);
+    setSelectedText(bookmark.text_preview || "");
+    setIsBookmarkDialogOpen(true);
+  };
+
+  const handleDeleteBookmark = async (bookmark: FileBookmark) => {
+    try {
+      await deleteBookmark(bookmark.id);
+      toast.success("Bookmark deleted successfully");
+    } catch {
+      toast.error("Failed to delete bookmark");
     }
   };
 
+  const handleOpenBookmarksSheet = () => {
+    setIsBookmarksSheetOpen(true);
+  };
+
   const renderTextContentWithBookmarks = useCallback(() => {
-    if (!textContent) return <p className="text-muted-foreground">No text content available.</p>;
+    if (!textContent)
+      return (
+        <p className="text-muted-foreground">No text content available.</p>
+      );
 
     // Get text bookmarks and sort by character position
     const textBookmarks = bookmarks
-      .filter(bookmark => bookmark.position_data.type === 'text')
+      .filter((bookmark) => bookmark.position_data.type === "text")
       .sort((a, b) => {
-        const aPos = (a.position_data as any).character;
-        const bPos = (b.position_data as any).character;
+        const aPos = (a.position_data as { character: number }).character;
+        const bPos = (b.position_data as { character: number }).character;
         return aPos - bPos;
       });
 
     if (textBookmarks.length === 0) {
       // No bookmarks, render normally
-      const paragraphs = textContent.split('\n\n');
+      const paragraphs = textContent.split("\n\n");
       return (
         <div className="space-y-6">
           {paragraphs.map((paragraph, pIndex) => (
-            <p key={pIndex} className="mb-6 last:mb-0 transition-colors duration-200" id={`paragraph-${pIndex}`}>
+            <p
+              key={pIndex}
+              className="mb-6 last:mb-0 transition-colors duration-200"
+              id={`paragraph-${pIndex}`}
+            >
               {paragraph}
             </p>
           ))}
@@ -612,22 +741,22 @@ function TextReader({
     const elements: React.ReactNode[] = [];
     let elementKey = 0;
 
-    textBookmarks.forEach((bookmark, bookmarkIndex) => {
-      const startPos = (bookmark.position_data as any).character;
+    textBookmarks.forEach((bookmark) => {
+      const startPos = (bookmark.position_data as { character: number })
+        .character;
       const endPos = startPos + (bookmark.text_preview?.length || 50); // Fallback length
 
       // Add text before bookmark
       if (startPos > currentPos) {
         const textBefore = textContent.slice(currentPos, startPos);
-        elements.push(
-          <span key={`text-${elementKey++}`}>
-            {textBefore}
-          </span>
-        );
+        elements.push(<span key={`text-${elementKey++}`}>{textBefore}</span>);
       }
 
       // Add highlighted bookmark text
-      const bookmarkText = textContent.slice(startPos, Math.min(endPos, textContent.length));
+      const bookmarkText = textContent.slice(
+        startPos,
+        Math.min(endPos, textContent.length)
+      );
       if (bookmarkText) {
         elements.push(
           <BookmarkTooltip
@@ -636,6 +765,7 @@ function TextReader({
             onBookmarkClick={handleBookmarkClick}
           >
             <span
+              data-bookmark-id={bookmark.id}
               className={`cursor-pointer transition-all duration-200 hover:opacity-80 px-1 py-0.5 rounded-sm bg-${bookmark.color}-100 border-b-2 border-${bookmark.color}-400 text-${bookmark.color}-900`}
               onClick={() => handleBookmarkClick(bookmark)}
             >
@@ -651,11 +781,7 @@ function TextReader({
     // Add remaining text after last bookmark
     if (currentPos < textContent.length) {
       const remainingText = textContent.slice(currentPos);
-      elements.push(
-        <span key={`text-${elementKey++}`}>
-          {remainingText}
-        </span>
-      );
+      elements.push(<span key={`text-${elementKey++}`}>{remainingText}</span>);
     }
 
     // Split into paragraphs while preserving highlights
@@ -664,13 +790,16 @@ function TextReader({
     let paragraphKey = 0;
 
     elements.forEach((element) => {
-      if (typeof element === 'string') {
-        const paragraphs = element.split('\n\n');
+      if (typeof element === "string") {
+        const paragraphs = element.split("\n\n");
         paragraphs.forEach((paragraph, index) => {
           if (index > 0) {
             // Start new paragraph
             result.push(
-              <p key={`paragraph-${paragraphKey++}`} className="mb-6 last:mb-0 transition-colors duration-200">
+              <p
+                key={`paragraph-${paragraphKey++}`}
+                className="mb-6 last:mb-0 transition-colors duration-200"
+              >
                 {currentParagraph}
               </p>
             );
@@ -688,7 +817,10 @@ function TextReader({
     // Add final paragraph
     if (currentParagraph.length > 0) {
       result.push(
-        <p key={`paragraph-${paragraphKey++}`} className="mb-6 last:mb-0 transition-colors duration-200">
+        <p
+          key={`paragraph-${paragraphKey++}`}
+          className="mb-6 last:mb-0 transition-colors duration-200"
+        >
           {currentParagraph}
         </p>
       );
@@ -726,7 +858,7 @@ function TextReader({
 
   return (
     <div className="relative">
-      <MobileAudioPlayer 
+      <MobileAudioPlayer
         audioFile={relatedAudioFile || null}
         isVisible={!!relatedAudioFile}
       />
@@ -742,41 +874,51 @@ function TextReader({
                   Text
                 </Badge>
                 {relatedAudioFile && (
-                  <Badge variant="outline" className="text-emerald-600 border-emerald-600">
+                  <Badge
+                    variant="outline"
+                    className="text-emerald-600 border-emerald-600"
+                  >
                     <Headphones className="h-3 w-3 mr-1" />
                     Audio Available
                   </Badge>
                 )}
-                <Badge variant="outline" className="text-amber-600 border-amber-600">
+                <Badge
+                  variant="outline"
+                  className="text-amber-600 border-amber-600"
+                >
                   <Bookmark className="h-3 w-3 mr-1" />
                   {bookmarks.length} Bookmarks
                 </Badge>
               </div>
-              
+
               <div className="flex flex-wrap gap-2">
-                {!relatedAudioFile && !!(fileData.text_content || textContent) && (
-                  <Button 
-                    onClick={onConvertToAudio}
-                    disabled={isConverting}
-                    size="sm"
-                    className="gap-2"
-                  >
-                    {isConverting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Converting...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Volume2 className="h-4 w-4" />
-                        <span>Create Audio</span>
-                      </>
-                    )}
-                  </Button>
-                )}
+                {!relatedAudioFile &&
+                  !!(fileData.text_content || textContent) && (
+                    <Button
+                      onClick={onConvertToAudio}
+                      disabled={isConverting}
+                      size="sm"
+                      className="gap-2"
+                    >
+                      {isConverting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Converting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="h-4 w-4" />
+                          <span>Create Audio</span>
+                        </>
+                      )}
+                    </Button>
+                  )}
 
                 {/* Bookmarks Sheet Trigger */}
-                <Sheet>
+                <Sheet
+                  open={isBookmarksSheetOpen}
+                  onOpenChange={setIsBookmarksSheetOpen}
+                >
                   <SheetTrigger asChild>
                     <Button variant="outline" size="sm" className="gap-2">
                       <List className="h-4 w-4" />
@@ -808,32 +950,69 @@ function TextReader({
 
             <ContextMenu>
               <ContextMenuTrigger asChild>
-                <div 
+                <div
                   ref={textContainerRef}
                   className="prose prose-lg dark:prose-invert max-w-none min-h-[70vh] p-4 md:p-8 bg-background border rounded-lg shadow-sm cursor-text"
                   style={{
-                    lineHeight: '1.8',
-                    fontSize: '18px',
-                    fontFamily: 'ui-serif, Georgia, serif'
+                    lineHeight: "1.8",
+                    fontSize: "18px",
+                    fontFamily: "ui-serif, Georgia, serif",
                   }}
                   onMouseUp={handleTextSelection}
                   onTouchEnd={handleTextSelection}
+                  onContextMenu={(e) => {
+                    // Find bookmark at click position
+                    const bookmark = findBookmarkAtPosition(
+                      e.clientX,
+                      e.clientY
+                    );
+                    setClickedBookmark(bookmark);
+                  }}
                 >
                   {renderTextContentWithBookmarks()}
                 </div>
               </ContextMenuTrigger>
-              
-              <ContextMenuContent className="w-56">
+
+              <ContextMenuContent className="w-64">
+                {/* Bookmark-specific actions when right-clicking on a bookmark */}
+                {clickedBookmark && (
+                  <>
+                    <ContextMenuItem
+                      onClick={() => handleEditBookmark(clickedBookmark)}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <Edit className="h-4 w-4" />
+                      Edit Bookmark
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onClick={() => handleDeleteBookmark(clickedBookmark)}
+                      className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete Bookmark
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onClick={handleOpenBookmarksSheet}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <List className="h-4 w-4" />
+                      View All Bookmarks
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                  </>
+                )}
+
+                {/* Text selection actions */}
                 {selectedText && (
                   <>
-                    <ContextMenuItem 
+                    <ContextMenuItem
                       onClick={handleCopyText}
                       className="gap-2 cursor-pointer"
                     >
                       <Copy className="h-4 w-4" />
                       Copy Text
                     </ContextMenuItem>
-                    <ContextMenuItem 
+                    <ContextMenuItem
                       onClick={handleCreateBookmark}
                       className="gap-2 cursor-pointer"
                     >
@@ -843,23 +1022,40 @@ function TextReader({
                     <ContextMenuSeparator />
                   </>
                 )}
+
+                {/* General actions */}
                 <ContextMenuItem className="gap-2 cursor-pointer">
                   <Search className="h-4 w-4" />
                   Search in Document
                 </ContextMenuItem>
+
+                {/* Show bookmarks sheet if no other actions are available */}
+                {!selectedText && !clickedBookmark && (
+                  <>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      onClick={handleOpenBookmarksSheet}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <List className="h-4 w-4" />
+                      View Bookmarks ({bookmarks.length})
+                    </ContextMenuItem>
+                  </>
+                )}
               </ContextMenuContent>
             </ContextMenu>
           </div>
         </div>
       </div>
 
-      {/* Bookmark Creation Dialog */}
+      {/* Bookmark Creation/Edit Dialog */}
       <BookmarkDialog
         open={isBookmarkDialogOpen}
         onOpenChange={setIsBookmarkDialogOpen}
         fileId={fileId}
         positionData={bookmarkPosition}
         textPreview={selectedText}
+        bookmark={editingBookmark}
         onSave={handleBookmarkSave}
         isLoading={false}
       />
@@ -886,12 +1082,15 @@ function StandaloneAudioPlayer({
   } = useBookmarks({ autoLoad: true, fileId: fileData.id });
 
   // Filter audio bookmarks from all bookmarks
-  const audioBookmarks = bookmarks.filter(bookmark => 
-    bookmark.position_data.type === 'audio'
+  const audioBookmarks = bookmarks.filter(
+    (bookmark) => bookmark.position_data.type === "audio"
   );
 
   // Wrapper functions to match BookmarksList interface
-  const handleBookmarkUpdate = async (id: string, data: UpdateBookmarkData): Promise<void> => {
+  const handleBookmarkUpdate = async (
+    id: string,
+    data: UpdateBookmarkData
+  ): Promise<void> => {
     await updateBookmark(id, data);
   };
 
@@ -904,8 +1103,10 @@ function StandaloneAudioPlayer({
     setIsBookmarkDialogOpen(true);
   };
 
-  const handleBookmarkSave = async (data: CreateBookmarkData | UpdateBookmarkData) => {
-    if ('file_id' in data) {
+  const handleBookmarkSave = async (
+    data: CreateBookmarkData | UpdateBookmarkData
+  ) => {
+    if ("file_id" in data) {
       // Creating new bookmark
       await createBookmark(data as CreateBookmarkData);
       toast.success("Bookmark created successfully");
@@ -913,7 +1114,10 @@ function StandaloneAudioPlayer({
   };
 
   const handleBookmarkClick = (bookmark: FileBookmark) => {
-    const audioData = bookmark.position_data as { type: 'audio'; timestamp: number };
+    const audioData = bookmark.position_data as {
+      type: "audio";
+      timestamp: number;
+    };
     if (audioData.timestamp && audioPlayerRef.current) {
       audioPlayerRef.current.seek(audioData.timestamp);
     }
@@ -932,14 +1136,23 @@ function StandaloneAudioPlayer({
                 <div>
                   <div className="flex items-center gap-2">
                     Audio Player
-                    <Badge variant="default" className="bg-emerald-600">Audio</Badge>
-                    <Badge variant="outline" className="text-amber-600 border-amber-600">
+                    <Badge variant="default" className="bg-emerald-600">
+                      Audio
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className="text-amber-600 border-amber-600"
+                    >
                       <Bookmark className="h-3 w-3 mr-1" />
                       {audioBookmarks.length} Bookmarks
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground font-normal">
-                    {fileData.file_size ? Math.round((fileData.file_size / 1024 / 1024) * 100) / 100 : 0} MB
+                    {fileData.file_size
+                      ? Math.round((fileData.file_size / 1024 / 1024) * 100) /
+                        100
+                      : 0}{" "}
+                    MB
                   </p>
                 </div>
               </div>
@@ -974,7 +1187,7 @@ function StandaloneAudioPlayer({
           </CardHeader>
 
           <CardContent className="space-y-6">
-            <MobileAudioPlayer 
+            <MobileAudioPlayer
               audioFile={fileData}
               isVisible={true}
               bookmarks={audioBookmarks}
@@ -1006,7 +1219,7 @@ function StandaloneAudioPlayer({
         onOpenChange={setIsBookmarkDialogOpen}
         fileId={fileData.id}
         positionData={{
-          type: 'audio',
+          type: "audio",
           timestamp: bookmarkTimestamp,
         }}
         onSave={handleBookmarkSave}
@@ -1018,7 +1231,9 @@ function StandaloneAudioPlayer({
 
 export function FileViewer({ fileId }: { fileId: string }) {
   const [fileData, setFileData] = useState<FileWithProgressData | null>(null);
-  const [relatedAudioFile, setRelatedAudioFile] = useState<FileWithProgressData | undefined>(undefined);
+  const [relatedAudioFile, setRelatedAudioFile] = useState<
+    FileWithProgressData | undefined
+  >(undefined);
   const [loading, setLoading] = useState(true);
 
   const router = useRouter();
@@ -1033,7 +1248,7 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
     let textToConvert = fileData.text_content;
 
-    if (!textToConvert && fileData.file_type === 'text/plain') {
+    if (!textToConvert && fileData.file_type === "text/plain") {
       try {
         const response = await fetch(`/api/files/${fileData.id}`);
         if (response.ok) {
@@ -1056,14 +1271,17 @@ export function FileViewer({ fileId }: { fileId: string }) {
     });
 
     try {
-      const result = await convertToSpeech(textToConvert, { fileId: fileData.id, autoPlay: false });
-      
+      const result = await convertToSpeech(textToConvert, {
+        fileId: fileData.id,
+        autoPlay: false,
+      });
+
       if (result.audioFileId) {
         toast.success("Audio conversion complete!", {
           id: toastId,
           description: "The audio file has been created and is ready to play.",
         });
-        
+
         setTimeout(() => {
           window.location.reload();
         }, 1000);
@@ -1077,7 +1295,8 @@ export function FileViewer({ fileId }: { fileId: string }) {
       console.error("TTS conversion error:", error);
       toast.error("Audio conversion failed", {
         id: toastId,
-        description: error instanceof Error ? error.message : "Please try again later.",
+        description:
+          error instanceof Error ? error.message : "Please try again later.",
       });
     }
   };
@@ -1085,7 +1304,9 @@ export function FileViewer({ fileId }: { fileId: string }) {
   useEffect(() => {
     const fetchFile = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (!user) {
           router.push("/auth/login");
           return;
@@ -1093,13 +1314,15 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
         const { data: file, error: fileError } = await supabase
           .from("files")
-          .select(`
+          .select(
+            `
             *,
             file_progress (
               progress_percentage,
               last_position
             )
-          `)
+          `
+          )
           .eq("id", fileId)
           .eq("user_id", user.id)
           .single();
@@ -1114,18 +1337,20 @@ export function FileViewer({ fileId }: { fileId: string }) {
           ...fileWithProgress,
           progress: fileWithProgress.file_progress?.[0]
             ? {
-                progress_percentage: fileWithProgress.file_progress[0].progress_percentage || 0,
-                last_position: fileWithProgress.file_progress[0].last_position || "0",
+                progress_percentage:
+                  fileWithProgress.file_progress[0].progress_percentage || 0,
+                last_position:
+                  fileWithProgress.file_progress[0].last_position || "0",
               }
             : null,
         };
 
         setFileData(formattedFile);
 
-        if (!formattedFile.file_type.startsWith('audio/')) {
-          const baseFilename = formattedFile.filename.replace(/\.[^/.]+$/, '');
+        if (!formattedFile.file_type.startsWith("audio/")) {
+          const baseFilename = formattedFile.filename.replace(/\.[^/.]+$/, "");
           const audioFilename = `${baseFilename} (Audio).mp3`;
-          
+
           const { data: audioFile } = await supabase
             .from("files")
             .select(`*`)
@@ -1181,7 +1406,9 @@ export function FileViewer({ fileId }: { fileId: string }) {
       <div className="text-center py-12 px-4">
         <FileText className="h-12 w-12 text-destructive mx-auto mb-4" />
         <h2 className="text-xl font-semibold mb-2">File Not Found</h2>
-        <p className="text-muted-foreground mb-6">The requested file could not be located.</p>
+        <p className="text-muted-foreground mb-6">
+          The requested file could not be located.
+        </p>
         <Link href="/library">
           <Button className="gap-2">
             <ArrowLeft className="h-4 w-4" />
@@ -1193,7 +1420,9 @@ export function FileViewer({ fileId }: { fileId: string }) {
   }
 
   const isAudio = fileData.file_type.startsWith("audio/");
-  const isText = fileData.file_type === "text/plain" || fileData.file_type === "application/epub+zip";
+  const isText =
+    fileData.file_type === "text/plain" ||
+    fileData.file_type === "application/epub+zip";
 
   return (
     <div className="min-h-screen bg-background">
@@ -1207,7 +1436,12 @@ export function FileViewer({ fileId }: { fileId: string }) {
               </Button>
             </Link>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={downloadFile} className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadFile}
+                className="gap-2"
+              >
                 <Download className="h-4 w-4" />
                 <span className="hidden sm:inline">Download</span>
               </Button>
@@ -1223,9 +1457,9 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
       {isAudio && <StandaloneAudioPlayer fileData={fileData} />}
       {isText && (
-        <TextReader 
-          fileId={fileId} 
-          fileData={fileData} 
+        <TextReader
+          fileId={fileId}
+          fileData={fileData}
           relatedAudioFile={relatedAudioFile}
           onConvertToAudio={handleConvertToAudio}
           isConverting={isTtsLoading}
