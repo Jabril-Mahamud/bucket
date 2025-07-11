@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { 
   Headphones, 
   BarChart3, 
-  BookmarkPlus, 
   List,
   Bookmark
 } from "lucide-react";
@@ -26,6 +25,8 @@ import { BookmarkDialog } from "@/components/bookmarks/bookmark-dialog";
 import { BookmarksList } from "@/components/bookmarks/bookmarks-list";
 import { AudioPlayer } from "./audio-player";
 import { toast } from "sonner";
+
+import { FileBookmark, CreateBookmarkData, UpdateBookmarkData, BookmarkPositionData } from "@/lib/types";
 
 interface AudioViewerProps {
   fileData: FileWithProgressData;
@@ -47,10 +48,10 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
 
   // Filter audio bookmarks
   const audioBookmarks = bookmarks.filter(
-    (bookmark) => bookmark.position_data.type === "audio"
+    (bookmark): bookmark is FileBookmark => bookmark.position_data.type === "audio"
   );
 
-  const handleBookmarkUpdate = async (id: string, data: any): Promise<void> => {
+  const handleBookmarkUpdate = async (id: string, data: UpdateBookmarkData): Promise<void> => {
     await updateBookmark(id, data);
   };
 
@@ -63,19 +64,21 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
     setIsBookmarkDialogOpen(true);
   };
 
-  const handleBookmarkSave = async (data: any) => {
+  const handleBookmarkSave = async (data: CreateBookmarkData | UpdateBookmarkData) => {
     if ("file_id" in data) {
-      await createBookmark(data);
+      // This is a creation scenario
+      await createBookmark(data as CreateBookmarkData);
       toast.success("Bookmark created successfully");
+    } else {
+      // This is an update scenario (though not used in this component's current flow)
+      // You would typically handle updates here if the dialog was used for editing
+      console.warn("Update scenario not handled in AudioViewer's handleBookmarkSave");
     }
   };
 
-  const handleBookmarkClick = (bookmark: any) => {
-    const audioData = bookmark.position_data as {
-      type: "audio";
-      timestamp: number;
-    };
-    if (audioData.timestamp && audioPlayerRef.current) {
+  const handleBookmarkClick = (bookmark: FileBookmark) => {
+    const audioData = bookmark.position_data as BookmarkPositionData;
+    if (audioData.type === "audio" && audioData.timestamp && audioPlayerRef.current) {
       audioPlayerRef.current.seek(audioData.timestamp);
     }
   };

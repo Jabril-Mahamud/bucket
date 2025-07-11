@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { BookmarkIndicator } from "./bookmark-indicator";
-
+import { formatBookmarkPosition } from "@/lib/bookmark-utils";
 interface BookmarkTooltipProps {
   bookmark: FileBookmark;
   children?: React.ReactNode;

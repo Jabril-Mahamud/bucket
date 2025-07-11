@@ -21,6 +21,7 @@ import {
   FileBookmark,
   BookmarkPositionData 
 } from "@/lib/types";
+import { generateBookmarkTitle,formatBookmarkPosition } from "@/lib/bookmark-utils";
 import { Loader2, Bookmark } from "lucide-react";
 
 interface BookmarkDialogProps {

@@ -1,7 +1,7 @@
 // components/file/text-viewer.tsx
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -37,8 +37,6 @@ import { useBookmarks } from "@/hooks/useBookmarks";
 import { useTTS } from "@/hooks/useTTS";
 import { BookmarkDialog } from "@/components/bookmarks/bookmark-dialog";
 import { BookmarksList } from "@/components/bookmarks/bookmarks-list";
-import { BookmarkTooltip } from "@/components/bookmarks/bookmark-tooltip";
-import { BookmarkIndicator } from "@/components/bookmarks/bookmark-indicator";
 import { AudioPlayer } from "./audio-player";
 import { TextContent } from "./text-content";
 import { toast } from "sonner";

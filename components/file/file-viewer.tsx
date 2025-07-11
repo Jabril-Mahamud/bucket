@@ -1,13 +1,9 @@
 // components/file/file-viewer.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, FileText, Loader2 } from "lucide-react";
+import { ArrowLeft, FileText, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FileWithProgressData } from "@/lib/types";
 import { useFileData } from "@/hooks/useFileData";
 import { AudioViewer } from "./audio-viewer";
 import { TextViewer } from "./text-viewer";
@@ -15,8 +11,6 @@ import { ViewerHeader } from "./viewer-header";
 import { toast } from "sonner";
 
 export function FileViewer({ fileId }: { fileId: string }) {
-  const router = useRouter();
-  const supabase = createClient();
   
   const {
     fileData,
