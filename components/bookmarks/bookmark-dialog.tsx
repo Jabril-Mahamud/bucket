@@ -173,6 +173,11 @@ export function BookmarkDialog({
     return generateBookmarkTitle(textPreview || "");
   };
 
+  // Don't render if we don't have the required data for a new bookmark
+  if (!isEditing && !positionData) {
+    return null;
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">

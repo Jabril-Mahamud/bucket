@@ -19,14 +19,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { FileWithProgressData } from "@/lib/types";
+import { FileWithProgressData, BookmarkPositionData, CreateBookmarkData, UpdateBookmarkData, FileBookmark } from "@/lib/types";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { BookmarkDialog } from "@/components/bookmarks/bookmark-dialog";
 import { BookmarksList } from "@/components/bookmarks/bookmarks-list";
 import { AudioPlayer } from "./audio-player";
+import { generateAudioBookmarkTitle, generateAudioBookmarkPreview } from "@/lib/bookmark-utils";
 import { toast } from "sonner";
-
-import { FileBookmark, CreateBookmarkData, UpdateBookmarkData, BookmarkPositionData } from "@/lib/types";
 
 interface AudioViewerProps {
   fileData: FileWithProgressData;
@@ -35,9 +34,12 @@ interface AudioViewerProps {
 export function AudioViewer({ fileData }: AudioViewerProps) {
   const audioPlayerRef = useRef<{ seek: (time: number) => void } | null>(null);
   const [isBookmarkDialogOpen, setIsBookmarkDialogOpen] = useState(false);
-  const [bookmarkTimestamp, setBookmarkTimestamp] = useState<number>(0);
-  const [bookmarkEndTimestamp, setBookmarkEndTimestamp] = useState<number | undefined>(undefined);
-  const [bookmarkTextPreview, setBookmarkTextPreview] = useState<string>("");
+  
+  // Store bookmark data directly instead of relying on state timing
+  const [pendingBookmarkData, setPendingBookmarkData] = useState<{
+    positionData: BookmarkPositionData;
+    textPreview: string;
+  } | null>(null);
 
   // Bookmarks integration
   const {
@@ -73,29 +75,31 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  const generateBookmarkTitle = (startTime: number, endTime?: number) => {
-    if (endTime !== undefined) {
-      return `Audio Section ${formatTime(startTime)} - ${formatTime(endTime)}`;
-    } else {
-      return `Audio Bookmark at ${formatTime(startTime)}`;
-    }
-  };
-
-  const generateBookmarkPreview = (startTime: number, endTime?: number) => {
-    if (endTime !== undefined) {
-      const duration = endTime - startTime;
-      return `${Math.round(duration)}s audio section from ${formatTime(startTime)} to ${formatTime(endTime)}`;
-    } else {
-      return `Audio bookmark at ${formatTime(startTime)}`;
-    }
-  };
-
+  // Fixed: Create bookmark data immediately and store it
   const handleCreateBookmark = useCallback((timestamp: number, endTimestamp?: number) => {
     console.log('AudioViewer - Creating bookmark:', { timestamp, endTimestamp });
     
-    setBookmarkTimestamp(timestamp);
-    setBookmarkEndTimestamp(endTimestamp);
-    setBookmarkTextPreview(generateBookmarkPreview(timestamp, endTimestamp));
+    // Create the position data immediately
+    const positionData: BookmarkPositionData = endTimestamp !== undefined 
+      ? {
+          type: "audio",
+          timestamp: timestamp,
+          end_timestamp: endTimestamp,
+        }
+      : {
+          type: "audio",
+          timestamp: timestamp,
+        };
+
+    // Generate preview text immediately
+    const textPreview = generateAudioBookmarkPreview(timestamp, endTimestamp);
+    
+    // Store the data and open dialog
+    setPendingBookmarkData({
+      positionData,
+      textPreview
+    });
+    
     setIsBookmarkDialogOpen(true);
   }, []);
 
@@ -108,11 +112,18 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
         const result = await createBookmark(data as CreateBookmarkData);
         console.log('AudioViewer - Bookmark created:', result);
         
-        if (bookmarkEndTimestamp !== undefined) {
+        // Check if it's a range bookmark for better toast message
+        const positionData = (data as CreateBookmarkData).position_data;
+        const isRange = positionData.type === "audio" && "end_timestamp" in positionData && positionData.end_timestamp !== undefined;
+        
+        if (isRange) {
           toast.success("Audio section bookmark created successfully");
         } else {
           toast.success("Audio bookmark created successfully");
         }
+        
+        // Clear pending data
+        setPendingBookmarkData(null);
       } catch (error) {
         console.error('AudioViewer - Error creating bookmark:', error);
         toast.error("Failed to create bookmark");
@@ -133,22 +144,6 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
     }
   }, []);
 
-  // Generate position data for the bookmark
-  const getBookmarkPositionData = (): BookmarkPositionData => {
-    if (bookmarkEndTimestamp !== undefined) {
-      return {
-        type: "audio",
-        timestamp: bookmarkTimestamp,
-        end_timestamp: bookmarkEndTimestamp,
-      };
-    } else {
-      return {
-        type: "audio",
-        timestamp: bookmarkTimestamp,
-      };
-    }
-  };
-
   // Count different types of bookmarks
   const pointBookmarks = audioBookmarks.filter(bookmark => {
     const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
@@ -162,6 +157,11 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
 
   const handleSeekCallback = useCallback((seekFn: (time: number) => void) => {
     audioPlayerRef.current = { seek: seekFn };
+  }, []);
+
+  const handleDialogClose = useCallback(() => {
+    setIsBookmarkDialogOpen(false);
+    setPendingBookmarkData(null);
   }, []);
 
   return (
@@ -287,16 +287,18 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
         </Card>
       </div>
 
-      {/* Bookmark Creation Dialog */}
-      <BookmarkDialog
-        open={isBookmarkDialogOpen}
-        onOpenChange={setIsBookmarkDialogOpen}
-        fileId={fileData.id}
-        positionData={getBookmarkPositionData()}
-        textPreview={bookmarkTextPreview}
-        onSave={handleBookmarkSave}
-        isLoading={false}
-      />
+      {/* Fixed Bookmark Creation Dialog */}
+      {pendingBookmarkData && (
+        <BookmarkDialog
+          open={isBookmarkDialogOpen}
+          onOpenChange={handleDialogClose}
+          fileId={fileData.id}
+          positionData={pendingBookmarkData.positionData}
+          textPreview={pendingBookmarkData.textPreview}
+          onSave={handleBookmarkSave}
+          isLoading={false}
+        />
+      )}
     </div>
   );
 }

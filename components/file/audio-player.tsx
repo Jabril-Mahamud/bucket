@@ -71,7 +71,7 @@ export function AudioPlayer({
   // Debug logging
   useEffect(() => {
     console.log('AudioPlayer bookmarks:', bookmarks);
-    console.log('AudioPlayer onCreateBookmark:', onCreateBookmark);
+    console.log('AudioPlayer onCreateBookmark:', !!onCreateBookmark);
   }, [bookmarks, onCreateBookmark]);
 
   useEffect(() => {
@@ -307,16 +307,32 @@ export function AudioPlayer({
     }
   };
 
+  // Fixed: Better validation for bookmark creation
+  const canCreateBookmark = () => {
+    return onCreateBookmark && state.duration > 0 && !isNaN(state.currentTime);
+  };
+
   const handleCreateTimestampBookmark = () => {
     console.log('Creating timestamp bookmark at:', state.currentTime);
-    if (onCreateBookmark && state.currentTime >= 0) {
-      onCreateBookmark(state.currentTime);
-    } else {
-      console.warn('Cannot create bookmark: onCreateBookmark missing or invalid time');
+    
+    if (!canCreateBookmark()) {
+      console.warn('Cannot create bookmark: missing callback or invalid state', {
+        hasCallback: !!onCreateBookmark,
+        duration: state.duration,
+        currentTime: state.currentTime
+      });
+      return;
     }
+
+    onCreateBookmark!(state.currentTime);
   };
 
   const handleStartRangeSelection = () => {
+    if (!canCreateBookmark()) {
+      console.warn('Cannot start range selection: missing callback or invalid state');
+      return;
+    }
+
     console.log('Starting range selection');
     setIsSelectingRange(true);
     setRangeStart(null);
@@ -558,7 +574,7 @@ export function AudioPlayer({
           </div>
 
           <div className="flex items-center gap-1">
-            {/* Bookmark Dropdown */}
+            {/* Fixed Bookmark Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -566,6 +582,7 @@ export function AudioPlayer({
                   size="sm"
                   className="h-8 w-8 p-0"
                   title="Add bookmark"
+                  disabled={!canCreateBookmark()}
                 >
                   <BookmarkPlus className="h-4 w-4" />
                 </Button>
@@ -573,7 +590,7 @@ export function AudioPlayer({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem 
                   onClick={handleCreateTimestampBookmark}
-                  disabled={state.currentTime < 0 || !onCreateBookmark}
+                  disabled={!canCreateBookmark()}
                 >
                   <Clock className="mr-2 h-4 w-4" />
                   Bookmark Current Time
@@ -582,7 +599,7 @@ export function AudioPlayer({
                 {!isSelectingRange ? (
                   <DropdownMenuItem 
                     onClick={handleStartRangeSelection}
-                    disabled={!onCreateBookmark}
+                    disabled={!canCreateBookmark()}
                   >
                     <Scissors className="mr-2 h-4 w-4" />
                     Select Time Range
