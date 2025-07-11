@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   Select, 
@@ -398,23 +398,23 @@ export function LibraryPage() {
           </CardContent>
         </Card>
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
           {filteredFiles.map((file) => (
-            <Card key={file.id} className="group hover:shadow-lg transition-all duration-200 hover:-translate-y-1 border-2 hover:border-primary/20">
+            <Card key={file.id} className="group flex flex-col justify-between hover:shadow-lg transition-all duration-200 hover:-translate-y-1 border-2 hover:border-primary/20">
               <CardHeader className="pb-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0">
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0 mt-1">
                     {getFileIcon(file.file_type)}
                   </div>
                   <div className="flex-1 min-w-0 space-y-2">
-                    <CardTitle className="text-sm sm:text-base line-clamp-2 leading-tight" title={file.filename}>
+                    <CardTitle className="text-sm sm:text-base line-clamp-3 leading-tight font-semibold" title={file.filename}>
                       {file.filename}
                     </CardTitle>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                      <Badge variant={getFileTypeBadgeVariant(file.file_type)} className="text-xs w-fit">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={getFileTypeBadgeVariant(file.file_type)} className="text-xs font-medium">
                         {getFileTypeLabel(file.file_type)}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground font-mono">
                         {formatFileSize(file.file_size)}
                       </span>
                     </div>
@@ -422,17 +422,17 @@ export function LibraryPage() {
                 </div>
               </CardHeader>
               
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 text-sm">
                 {/* Progress Bar */}
                 {file.progress && file.progress.progress_percentage > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Progress</span>
-                      <span className="font-medium">{Math.round(file.progress.progress_percentage)}%</span>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-medium text-muted-foreground">
+                      <span>Progress</span>
+                      <span>{Math.round(file.progress.progress_percentage)}%</span>
                     </div>
-                    <div className="w-full bg-secondary rounded-full h-2">
+                    <div className="w-full bg-secondary rounded-full h-1.5">
                       <div 
-                        className="bg-primary h-2 rounded-full transition-all duration-300"
+                        className="bg-primary h-1.5 rounded-full transition-all"
                         style={{ width: `${file.progress.progress_percentage}%` }}
                       />
                     </div>
@@ -441,42 +441,43 @@ export function LibraryPage() {
                 
                 {/* Date */}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Calendar className="h-3 w-3 flex-shrink-0" />
-                  <span className="truncate">{formatDate(file.uploaded_at)}</span>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                  <Link href={`/library/view/${file.id}`} className="flex-1">
-                    <Button size="sm" className="w-full gap-2 text-xs sm:text-sm">
-                      {getOpenButtonIcon(file.file_type)}
-                      {getOpenButtonText(file.file_type)}
-                    </Button>
-                  </Link>
-                  <div className="flex gap-2">
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => downloadFile(file)}
-                      className="gap-1 flex-1 sm:flex-none"
-                    >
-                      <Download className="h-3 w-3" />
-                      <span className="sm:hidden">Download</span>
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => deleteFile(file)}
-                      className="gap-1 flex-1 sm:flex-none hover:bg-destructive hover:text-destructive-foreground"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      <span className="sm:hidden">Delete</span>
-                    </Button>
-                  </div>
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>{formatDate(file.uploaded_at)}</span>
                 </div>
               </CardContent>
+
+              {/* Action Buttons */}
+              <CardFooter className="flex flex-col sm:flex-row gap-2 pt-4 border-t mt-auto">
+                <Link href={`/library/view/${file.id}`} className="w-full">
+                  <Button size="sm" className="w-full gap-2">
+                    {getOpenButtonIcon(file.file_type)}
+                    {getOpenButtonText(file.file_type)}
+                  </Button>
+                </Link>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => downloadFile(file)}
+                    className="w-full sm:w-auto flex-1"
+                    aria-label="Download"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => deleteFile(file)}
+                    className="w-full sm:w-auto flex-1 hover:bg-destructive hover:text-destructive-foreground"
+                    aria-label="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardFooter>
             </Card>
-          ))}
+          ))
+        }
         </div>
       ) : (
         // List View
@@ -485,26 +486,27 @@ export function LibraryPage() {
             <Card key={file.id} className="group hover:shadow-md transition-all duration-200">
               <CardContent className="p-3 sm:p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
                     <div className="flex-shrink-0">
                       {getFileIcon(file.file_type)}
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-1">
-                        <h3 className="font-medium truncate text-sm sm:text-base">{file.filename}</h3>
-                        <Badge variant={getFileTypeBadgeVariant(file.file_type)} className="text-xs w-fit">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-1 mb-1">
+                        <h3 className="font-semibold truncate text-sm sm:text-base leading-tight">{file.filename}</h3>
+                        <Badge variant={getFileTypeBadgeVariant(file.file_type)} className="text-xs w-fit font-medium">
                           {getFileTypeLabel(file.file_type)}
                         </Badge>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm text-muted-foreground font-mono">
                         <span>{formatFileSize(file.file_size)}</span>
-                        <span className="hidden sm:inline">•</span>
+                        <span className="hidden sm:inline text-muted-foreground/50">•</span>
                         <span>{formatDate(file.uploaded_at)}</span>
                         {file.progress && file.progress.progress_percentage > 0 && (
                           <>
-                            <span className="hidden sm:inline">•</span>
-                            <span className="text-primary font-medium">
+                            <span className="hidden sm:inline text-muted-foreground/50">•</span>
+                            <span className="text-primary font-medium flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full bg-primary"/>
                               {Math.round(file.progress.progress_percentage)}% complete
                             </span>
                           </>
@@ -526,18 +528,18 @@ export function LibraryPage() {
                         variant="outline"
                         onClick={() => downloadFile(file)}
                         className="flex-1 sm:flex-none"
+                        aria-label="Download"
                       >
-                        <Download className="h-3 w-3" />
-                        <span className="sm:hidden ml-1">Download</span>
+                        <Download className="h-4 w-4" />
                       </Button>
                       <Button 
                         size="sm" 
                         variant="outline"
                         onClick={() => deleteFile(file)}
                         className="flex-1 sm:flex-none hover:bg-destructive hover:text-destructive-foreground"
+                        aria-label="Delete"
                       >
-                        <Trash2 className="h-3 w-3" />
-                        <span className="sm:hidden ml-1">Delete</span>
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
