@@ -1,8 +1,7 @@
 // lib/bookmark-utils.ts
 import { BookmarkColor, BookmarkColorIndex, getBookmarkColor, getBookmarkColorByName, BookmarkPositionData } from '@/lib/types';
-
 /**
- * Get Tailwind CSS classes for a bookmark color
+ * Get Tailwind CSS classes for a bookmark color (theme-aware)
  */
 export function getBookmarkColorClasses(color: BookmarkColor | BookmarkColorIndex) {
   const colorConfig = typeof color === 'string' 
@@ -10,15 +9,17 @@ export function getBookmarkColorClasses(color: BookmarkColor | BookmarkColorInde
     : getBookmarkColor(color);
   
   return {
-    dot: `bg-${colorConfig.name}-400 border-${colorConfig.name}-600`,
-    indicator: `bg-${colorConfig.name}-100 border-${colorConfig.name}-300 text-${colorConfig.name}-800`,
-    badge: `bg-${colorConfig.name}-50 text-${colorConfig.name}-700 border-${colorConfig.name}-200`,
-    button: `bg-${colorConfig.name}-100 hover:bg-${colorConfig.name}-200 text-${colorConfig.name}-800 border-${colorConfig.name}-300`,
-    ring: `focus:ring-${colorConfig.name}-500`,
+    // Light mode: pastel backgrounds with dark text
+    // Dark mode: darker backgrounds with light text
+    dot: `bg-${colorConfig.name}-400 border-${colorConfig.name}-600 dark:bg-${colorConfig.name}-600 dark:border-${colorConfig.name}-400`,
+    indicator: `bg-${colorConfig.name}-100 border-${colorConfig.name}-300 text-${colorConfig.name}-800 dark:bg-${colorConfig.name}-800 dark:border-${colorConfig.name}-600 dark:text-${colorConfig.name}-200`,
+    badge: `bg-${colorConfig.name}-50 text-${colorConfig.name}-700 border-${colorConfig.name}-200 dark:bg-${colorConfig.name}-900 dark:text-${colorConfig.name}-300 dark:border-${colorConfig.name}-700`,
+    button: `bg-${colorConfig.name}-100 hover:bg-${colorConfig.name}-200 text-${colorConfig.name}-800 border-${colorConfig.name}-300 dark:bg-${colorConfig.name}-800 dark:hover:bg-${colorConfig.name}-700 dark:text-${colorConfig.name}-200 dark:border-${colorConfig.name}-600`,
+    ring: `focus:ring-${colorConfig.name}-500 dark:focus:ring-${colorConfig.name}-400`,
+    highlight: `bg-${colorConfig.name}-100 border-${colorConfig.name}-400 text-${colorConfig.name}-900 dark:bg-${colorConfig.name}-800 dark:border-${colorConfig.name}-500 dark:text-${colorConfig.name}-100`,
     config: colorConfig
   };
 }
-
 /**
  * Generate a readable text preview from content around a position
  */
