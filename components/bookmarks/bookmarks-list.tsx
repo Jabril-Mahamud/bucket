@@ -15,14 +15,16 @@ import {
 import { BookmarkIndicator } from "./bookmark-indicator";
 import { BookmarkDialog } from "./bookmark-dialog";
 import { FileBookmark, UpdateBookmarkData } from "@/lib/types";
-import { formatBookmarkPosition } from "@/lib/bookmark-utils";
+import { formatBookmarkPosition, formatAudioDuration } from "@/lib/bookmark-utils";
 import { 
   Search, 
   MoreHorizontal, 
   Edit, 
   Trash2, 
   BookmarkPlus,
-  Calendar
+  Calendar,
+  Clock,
+  Scissors
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -56,6 +58,18 @@ export function BookmarksList({
     bookmark.note?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     bookmark.text_preview?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Sort bookmarks by position
+  const sortedBookmarks = filteredBookmarks.sort((a, b) => {
+    if (a.position_data.type === 'audio' && b.position_data.type === 'audio') {
+      return a.position_data.timestamp - b.position_data.timestamp;
+    }
+    if (a.position_data.type === 'text' && b.position_data.type === 'text') {
+      return a.position_data.character - b.position_data.character;
+    }
+    // Mixed types, sort by creation date
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 
   const handleEditBookmark = (bookmark: FileBookmark) => {
     setEditingBookmark(bookmark);
@@ -109,6 +123,33 @@ export function BookmarksList({
     }
   };
 
+  const getBookmarkTypeIcon = (bookmark: FileBookmark) => {
+    if (bookmark.position_data.type === 'audio') {
+      const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
+      return audioData.end_timestamp !== undefined ? <Scissors className="h-3 w-3" /> : <Clock className="h-3 w-3" />;
+    }
+    return <BookmarkPlus className="h-3 w-3" />;
+  };
+
+  const getBookmarkTypeLabel = (bookmark: FileBookmark) => {
+    if (bookmark.position_data.type === 'audio') {
+      const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
+      return audioData.end_timestamp !== undefined ? 'Section' : 'Timestamp';
+    }
+    return 'Bookmark';
+  };
+
+  const getAudioDurationInfo = (bookmark: FileBookmark) => {
+    if (bookmark.position_data.type === 'audio') {
+      const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
+      if (audioData.end_timestamp !== undefined) {
+        const duration = audioData.end_timestamp - audioData.timestamp;
+        return formatAudioDuration(duration);
+      }
+    }
+    return null;
+  };
+
   return (
     <div className="w-full max-w-md space-y-4">
       <Card>
@@ -155,7 +196,7 @@ export function BookmarksList({
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
                 <p className="text-sm text-muted-foreground mt-2">Loading bookmarks...</p>
               </div>
-            ) : filteredBookmarks.length === 0 ? (
+            ) : sortedBookmarks.length === 0 ? (
               <div className="text-center py-8">
                 <BookmarkPlus className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">
@@ -166,79 +207,94 @@ export function BookmarksList({
                 </p>
               </div>
             ) : (
-              filteredBookmarks.map((bookmark) => (
-                <Card 
-                  key={bookmark.id} 
-                  className="p-3 hover:bg-muted/50 transition-colors cursor-pointer"
-                  onClick={() => onBookmarkClick?.(bookmark)}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <BookmarkIndicator 
-                        color={bookmark.color} 
-                        size="sm"
-                        className="mt-1 flex-shrink-0"
-                      />
-                      
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-sm leading-tight line-clamp-2">
-                          {bookmark.title}
-                        </h4>
+              sortedBookmarks.map((bookmark) => {
+                const durationInfo = getAudioDurationInfo(bookmark);
+                
+                return (
+                  <Card 
+                    key={bookmark.id} 
+                    className="p-3 hover:bg-muted/50 transition-colors cursor-pointer"
+                    onClick={() => onBookmarkClick?.(bookmark)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <BookmarkIndicator 
+                          color={bookmark.color} 
+                          size="sm"
+                          className="mt-1 flex-shrink-0"
+                        />
                         
-                        {bookmark.note && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                            {bookmark.note}
-                          </p>
-                        )}
-                        
-                        {bookmark.text_preview && (
-                          <p className="text-xs text-muted-foreground italic mt-1 line-clamp-1">
-                            &quot;{bookmark.text_preview}&quot;
-                          </p>
-                        )}
-                        
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge variant="outline" className="text-xs">
-                            {formatBookmarkPosition(bookmark.position_data)}
-                          </Badge>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-sm leading-tight line-clamp-2">
+                            {bookmark.title}
+                          </h4>
                           
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Calendar className="h-3 w-3" />
-                            {formatRelativeTime(bookmark.created_at)}
+                          {bookmark.note && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {bookmark.note}
+                            </p>
+                          )}
+                          
+                          {bookmark.text_preview && (
+                            <p className="text-xs text-muted-foreground italic mt-1 line-clamp-1">
+                              &quot;{bookmark.text_preview}&quot;
+                            </p>
+                          )}
+                          
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            <Badge variant="outline" className="text-xs flex items-center gap-1">
+                              {getBookmarkTypeIcon(bookmark)}
+                              {formatBookmarkPosition(bookmark.position_data)}
+                            </Badge>
+                            
+                            <Badge variant="secondary" className="text-xs">
+                              {getBookmarkTypeLabel(bookmark)}
+                            </Badge>
+                            
+                            {durationInfo && (
+                              <Badge variant="outline" className="text-xs text-purple-600 border-purple-600">
+                                {durationInfo}
+                              </Badge>
+                            )}
+                            
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Calendar className="h-3 w-3" />
+                              {formatRelativeTime(bookmark.created_at)}
+                            </div>
                           </div>
                         </div>
                       </div>
+                      
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEditBookmark(bookmark)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteBookmark(bookmark)}
+                            className="text-destructive"
+                            disabled={isDeleting === bookmark.id}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEditBookmark(bookmark)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteBookmark(bookmark)}
-                          className="text-destructive"
-                          disabled={isDeleting === bookmark.id}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </Card>
-              ))
+                  </Card>
+                );
+              })
             )}
           </div>
         </CardContent>

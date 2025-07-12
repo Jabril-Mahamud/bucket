@@ -1,4 +1,3 @@
-
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -16,17 +15,23 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get file metadata
-    const { data: file, error: fileError } = await supabase
+    // Get file metadata - handle the case where no file is found
+    const { data: files, error: fileError } = await supabase
       .from('files')
       .select('*')
       .eq('id', fileId)
-      .eq('user_id', user.id)
-      .single();
+      .eq('user_id', user.id);
 
-    if (fileError || !file) {
+    if (fileError) {
+      console.error("Database error:", fileError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    if (!files || files.length === 0) {
       return NextResponse.json({ error: 'File not found' }, { status: 404 });
     }
+
+    const file = files[0];
 
     // Get file from storage
     const { data: fileData, error: storageError } = await supabase.storage
@@ -34,6 +39,7 @@ export async function GET(
       .download(file.file_path);
 
     if (storageError || !fileData) {
+      console.error("Storage error:", storageError);
       return NextResponse.json({ error: 'File not accessible' }, { status: 404 });
     }
 
@@ -49,8 +55,8 @@ export async function GET(
       return new NextResponse(textContent, {
         headers: {
           "Content-Type": "text/plain",
-          "Content-Disposition": `inline; filename="${file.filename}"`, // Suggests browser to display inline
-          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+          "Content-Disposition": `inline; filename="${file.filename}"`,
+          "Cache-Control": "public, max-age=3600",
         },
       });
     } else {
@@ -62,13 +68,12 @@ export async function GET(
         headers: {
           "Content-Type": file.file_type,
           "Content-Length": (file.file_size || 0).toString(),
-          "Content-Disposition": `inline; filename="${file.filename}"`, // Suggests browser to display inline
-          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+          "Content-Disposition": `inline; filename="${file.filename}"`,
+          "Cache-Control": "public, max-age=3600",
         },
       });
     }
 
-  
   } catch (error) {
     console.error("Error serving file:", error);
     return NextResponse.json(
