@@ -1,4 +1,3 @@
-
 // app/api/convert/route.ts
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
@@ -62,10 +61,10 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Save file metadata to database
+    // Save file metadata to database with corrected filename
     const fileInsert: TablesInsert<"files"> = {
       user_id: user.id,
-      filename: file.name,
+      filename: textFileName, // ✅ Fixed: Use converted filename instead of original
       file_path: storageData.path,
       file_type: 'text/plain',
       file_size: new Blob([conversionResult.text]).size,
