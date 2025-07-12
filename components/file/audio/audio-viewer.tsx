@@ -23,9 +23,9 @@ import { FileWithProgressData, BookmarkPositionData, CreateBookmarkData, UpdateB
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { BookmarkDialog } from "@/components/bookmarks/bookmark-dialog";
 import { BookmarksList } from "@/components/bookmarks/bookmarks-list";
-import { AudioPlayer } from "./audio-player";
-import { generateAudioBookmarkTitle, generateAudioBookmarkPreview } from "@/lib/bookmark-utils";
+import {  generateAudioBookmarkPreview } from "@/lib/bookmark-utils";
 import { toast } from "sonner";
+import { AudioPlayer } from "./audio-player";
 
 interface AudioViewerProps {
   fileData: FileWithProgressData;
@@ -67,12 +67,6 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
 
   const handleBookmarkDelete = async (id: string): Promise<void> => {
     await deleteBookmark(id);
-  };
-
-  const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
   // Fixed: Create bookmark data immediately and store it

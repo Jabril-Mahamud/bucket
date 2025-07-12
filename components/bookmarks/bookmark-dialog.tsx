@@ -51,7 +51,7 @@ export function BookmarkDialog({
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [selectedColor, setSelectedColor] = useState<BookmarkColor | undefined>(undefined);
-  const [selectedColorIndex, setSelectedColorIndex] = useState<BookmarkColorIndex | undefined>(undefined);
+  const [, setSelectedColorIndex] = useState<BookmarkColorIndex | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
   
   const isEditing = !!bookmark;

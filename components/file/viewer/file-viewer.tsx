@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileText, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useFileData } from "@/hooks/useFileData";
-import { AudioViewer } from "./audio-viewer";
+import { AudioViewer } from "../audio/audio-viewer";
 import { TextViewer } from "./text-viewer";
 import { ViewerHeader } from "./viewer-header";
 import { toast } from "sonner";

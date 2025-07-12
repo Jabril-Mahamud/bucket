@@ -15,7 +15,7 @@ import {
 import { BookmarkIndicator } from "./bookmark-indicator";
 import { BookmarkDialog } from "./bookmark-dialog";
 import { FileBookmark, UpdateBookmarkData } from "@/lib/types";
-import { formatBookmarkPosition, formatAudioTime, formatAudioDuration } from "@/lib/bookmark-utils";
+import { formatBookmarkPosition, formatAudioDuration } from "@/lib/bookmark-utils";
 import { 
   Search, 
   MoreHorizontal, 

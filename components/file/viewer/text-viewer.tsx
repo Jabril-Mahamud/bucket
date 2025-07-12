@@ -37,8 +37,8 @@ import { useBookmarks } from "@/hooks/useBookmarks";
 import { useTTS } from "@/hooks/useTTS";
 import { BookmarkDialog } from "@/components/bookmarks/bookmark-dialog";
 import { BookmarksList } from "@/components/bookmarks/bookmarks-list";
-import { AudioPlayer } from "./audio-player";
-import { TextContent } from "./text-content";
+import { AudioPlayer } from "../audio/audio-player";
+import { TextContent } from "../text-content";
 import { toast } from "sonner";
 
 interface TextViewerProps {
