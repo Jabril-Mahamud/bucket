@@ -23,8 +23,8 @@ export function useFileData(fileId: string) {
         return;
       }
 
-      // Fetch file with progress data
-      const { data: file, error: fileError } = await supabase
+      // Fetch file with progress data - handle the case where no file is found
+      const { data: files, error: fileError } = await supabase
         .from("files")
         .select(`
           *,
@@ -34,14 +34,20 @@ export function useFileData(fileId: string) {
           )
         `)
         .eq("id", fileId)
-        .eq("user_id", user.id)
-        .single();
+        .eq("user_id", user.id);
 
       if (fileError) {
+        console.error("Database error:", fileError);
+        setError("Database error occurred");
+        return;
+      }
+
+      if (!files || files.length === 0) {
         setError("File not found or access denied");
         return;
       }
 
+      const file = files[0];
       const fileWithProgress = file as DatabaseFile & {
         file_progress: FileProgressData[] | null;
       };
@@ -63,15 +69,14 @@ export function useFileData(fileId: string) {
         const baseFilename = formattedFile.filename.replace(/\.[^/.]+$/, "");
         const audioFilename = `${baseFilename} (Audio).mp3`;
 
-        const { data: audioFile } = await supabase
+        const { data: audioFiles } = await supabase
           .from("files")
           .select("*")
           .eq("filename", audioFilename)
-          .eq("user_id", user.id)
-          .single();
+          .eq("user_id", user.id);
 
-        if (audioFile) {
-          setRelatedAudioFile(audioFile as FileWithProgressData);
+        if (audioFiles && audioFiles.length > 0) {
+          setRelatedAudioFile(audioFiles[0] as FileWithProgressData);
         }
       }
     } catch (error) {

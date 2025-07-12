@@ -45,21 +45,34 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         .upload(filePath, file, {
           cacheControl: "3600",
           upsert: false,
-          
         });
 
       if (uploadError) throw uploadError;
 
-      // Insert file metadata into the database
-      const { error: dbError } = await supabase.from("files").insert({
-        user_id: user.id,
-        filename: file.name,
-        file_path: filePath,
-        file_size: file.size,
-        file_type: file.type,
-      });
+      // Insert file metadata into the database and return the created record
+      const { data: fileRecord, error: dbError } = await supabase
+        .from("files")
+        .insert({
+          user_id: user.id,
+          filename: file.name,
+          file_path: filePath,
+          file_size: file.size,
+          file_type: file.type,
+        })
+        .select()
+        .single();
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        // Clean up storage if database insert fails
+        await supabase.storage
+          .from("user-files")
+          .remove([filePath]);
+        throw dbError;
+      }
+
+      if (!fileRecord) {
+        throw new Error("Failed to create file record");
+      }
 
       toast.success("File uploaded successfully!");
       onUploadComplete();
