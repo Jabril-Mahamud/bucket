@@ -1,4 +1,4 @@
-// components/file/text-viewer.tsx
+// components/file/viewer/text-viewer.tsx
 "use client";
 
 import { useState, useRef, useCallback } from "react";
@@ -61,11 +61,13 @@ export function TextViewer({
   } | null>(null);
   const [isBookmarkDialogOpen, setIsBookmarkDialogOpen] = useState(false);
   const [bookmarkPosition, setBookmarkPosition] = useState<BookmarkPositionData | undefined>(undefined);
+  const [bookmarkTextPreview, setBookmarkTextPreview] = useState<string>("");
   const [isBookmarksSheetOpen, setIsBookmarksSheetOpen] = useState(false);
   const [clickedBookmark, setClickedBookmark] = useState<FileBookmark | undefined>(undefined);
   const [editingBookmark, setEditingBookmark] = useState<FileBookmark | undefined>(undefined);
 
-  const textContainerRef = useRef<HTMLDivElement>(null);
+  // We'll use this ref to get the actual text content element from TextContent
+  const textContentRef = useRef<HTMLDivElement | null>(null);
 
   // Hooks
   const {
@@ -87,28 +89,59 @@ export function TextViewer({
     await deleteBookmark(id);
   };
 
-  const handleTextSelection = () => {
+  // Improved text selection handler that works with any text container
+  const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
-    if (selection && selection.toString().trim()) {
-      const selectedText = selection.toString().trim();
-      setSelectedText(selectedText);
+    if (!selection || selection.rangeCount === 0) {
+      setSelectedText("");
+      setSelectedRange(null);
+      return;
+    }
 
-      // Calculate character position for bookmark
-      if (textContainerRef.current) {
-        const range = selection.getRangeAt(0);
-        const preCaretRange = range.cloneRange();
-        preCaretRange.selectNodeContents(textContainerRef.current);
+    const selectedText = selection.toString().trim();
+    if (!selectedText) {
+      setSelectedText("");
+      setSelectedRange(null);
+      return;
+    }
+
+    setSelectedText(selectedText);
+
+    // Get the range and calculate character position
+    const range = selection.getRangeAt(0);
+    
+    // Find the text container - either from our ref or by finding the prose container
+    let textContainer = textContentRef.current;
+    if (!textContainer) {
+      // Fallback: find the prose container in the document
+      textContainer = document.querySelector('.prose') as HTMLDivElement;
+    }
+
+    if (textContainer) {
+      try {
+        // Create a range from the start of the text container to the start of selection
+        const preCaretRange = document.createRange();
+        preCaretRange.selectNodeContents(textContainer);
         preCaretRange.setEnd(range.startContainer, range.startOffset);
+        
         const start = preCaretRange.toString().length;
         const end = start + selectedText.length;
 
         setSelectedRange({ start, end });
+        
+        // Debug logging
+        console.log('Text selection:', { selectedText, start, end });
+      } catch (error) {
+        console.error('Error calculating text position:', error);
+        // Fallback: use a simple character count
+        setSelectedRange({ start: 0, end: selectedText.length });
       }
     } else {
-      setSelectedText("");
-      setSelectedRange(null);
+      console.warn('Text container not found, using fallback range');
+      // Fallback range
+      setSelectedRange({ start: 0, end: selectedText.length });
     }
-  };
+  }, []);
 
   const handleCopyText = () => {
     if (selectedText) {
@@ -118,23 +151,26 @@ export function TextViewer({
   };
 
   const handleCreateBookmark = () => {
-    if (!selectedRange || !selectedText) return;
+    if (!selectedText) {
+      toast.error("Please select some text to bookmark");
+      return;
+    }
 
+    // Use selectedRange if available, otherwise fallback to basic position
+    const characterPosition = selectedRange?.start ?? 0;
+    
     const positionData: BookmarkPositionData = {
       type: "text",
-      character: selectedRange.start,
-      paragraph: calculateParagraphNumber(selectedRange.start),
+      character: characterPosition,
+      paragraph: Math.floor(characterPosition / 500) + 1, // Simple paragraph calculation
     };
 
     setBookmarkPosition(positionData);
+    setBookmarkTextPreview(selectedText);
     setEditingBookmark(undefined);
     setIsBookmarkDialogOpen(true);
-  };
-
-  const calculateParagraphNumber = (position: number): number => {
-    // This would need access to the text content to calculate properly
-    // For now, return a placeholder
-    return Math.floor(position / 500) + 1;
+    
+    console.log('Creating bookmark:', { positionData, selectedText });
   };
 
   const handleBookmarkSave = async (data: CreateBookmarkData | UpdateBookmarkData) => {
@@ -149,18 +185,28 @@ export function TextViewer({
         toast.success("Bookmark updated successfully");
       }
     }
+    
+    // Clear selection and close dialog
     setSelectedText("");
     setSelectedRange(null);
+    setBookmarkTextPreview("");
     setEditingBookmark(undefined);
+    
+    // Clear the browser text selection
+    window.getSelection()?.removeAllRanges();
   };
 
   const handleBookmarkClick = useCallback(
     (bookmark: FileBookmark) => {
-      if (bookmark.position_data?.type === "text" && textContainerRef.current) {
+      if (bookmark.position_data?.type === "text") {
         const characterPos = bookmark.position_data.character;
         // Scroll to bookmark position (simplified - you might want more sophisticated scrolling)
-        const element = textContainerRef.current;
-        element.scrollTop = (characterPos / 10000) * element.scrollHeight;
+        if (textContentRef.current) {
+          const element = textContentRef.current;
+          // Simple scroll calculation - this could be improved
+          const scrollPercentage = Math.min(characterPos / 10000, 1);
+          element.scrollTop = scrollPercentage * element.scrollHeight;
+        }
       }
     },
     []
@@ -169,7 +215,7 @@ export function TextViewer({
   const handleEditBookmark = (bookmark: FileBookmark) => {
     setEditingBookmark(bookmark);
     setBookmarkPosition(bookmark.position_data);
-    setSelectedText(bookmark.text_preview || "");
+    setBookmarkTextPreview(bookmark.text_preview || "");
     setIsBookmarkDialogOpen(true);
   };
 
@@ -243,7 +289,7 @@ export function TextViewer({
 
     // Check if the clicked element or its parent has bookmark data
     let currentElement = element as HTMLElement;
-    while (currentElement && currentElement !== textContainerRef.current) {
+    while (currentElement && currentElement !== textContentRef.current) {
       const bookmarkId = currentElement.getAttribute("data-bookmark-id");
       if (bookmarkId) {
         return bookmarks.find((b) => b.id === bookmarkId);
@@ -252,6 +298,11 @@ export function TextViewer({
     }
     return undefined;
   };
+
+  // Callback to receive the text content ref from TextContent component
+  const handleTextContentRef = useCallback((ref: HTMLDivElement | null) => {
+    textContentRef.current = ref;
+  }, []);
 
   return (
     <div className="relative">
@@ -345,12 +396,39 @@ export function TextViewer({
                     </div>
                   </SheetContent>
                 </Sheet>
+
+                {/* Manual Bookmark Button */}
+                <Button
+                  onClick={handleCreateBookmark}
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                >
+                  <BookmarkPlus className="h-4 w-4" />
+                  Add Bookmark
+                  {selectedText && <span className="text-xs">({selectedText.length} chars)</span>}
+                </Button>
               </div>
+
+              {/* Selection Info */}
+              {selectedText && (
+                <div className="p-3 bg-muted/50 border rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Selected Text</span>
+                    <span className="text-xs text-muted-foreground">
+                      {selectedText.length} characters
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground italic line-clamp-2">
+                    &quot;{selectedText}&quot;
+                  </p>
+                </div>
+              )}
             </div>
 
             <ContextMenu>
               <ContextMenuTrigger asChild>
-                <div ref={textContainerRef}>
+                <div>
                   <TextContent
                     fileId={fileId}
                     fileData={fileData}
@@ -362,6 +440,7 @@ export function TextViewer({
                       const bookmark = findBookmarkAtPosition(e.clientX, e.clientY);
                       setClickedBookmark(bookmark);
                     }}
+                    ref={handleTextContentRef}
                   />
                 </div>
               </ContextMenuTrigger>
@@ -447,7 +526,7 @@ export function TextViewer({
         onOpenChange={setIsBookmarkDialogOpen}
         fileId={fileId}
         positionData={bookmarkPosition}
-        textPreview={selectedText}
+        textPreview={bookmarkTextPreview}
         bookmark={editingBookmark}
         onSave={handleBookmarkSave}
         isLoading={false}
