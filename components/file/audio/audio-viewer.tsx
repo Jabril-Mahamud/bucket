@@ -22,6 +22,11 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
     audioPlayerRef.current = { seek: seekFn };
   }, []);
 
+  // Helper function to safely check progress
+  const hasProgress = fileData.progress && 
+    fileData.progress.progress_percentage !== null && 
+    fileData.progress.progress_percentage > 0;
+
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8">
       <div className="space-y-6">
@@ -56,9 +61,7 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
               onSeek={handleSeekCallback}
             />
 
-            {fileData.progress &&
-              fileData.progress.progress_percentage !== null && 
-              fileData.progress.progress_percentage > 0 && (
+            {hasProgress && (
               <div className="bg-muted/50 rounded-lg p-4">
                 <div className="flex items-center justify-between text-sm">
                   <span className="flex items-center gap-2 text-muted-foreground">
@@ -66,7 +69,7 @@ export function AudioViewer({ fileData }: AudioViewerProps) {
                     Last saved progress
                   </span>
                   <span className="font-medium">
-                    {Math.round(fileData.progress.progress_percentage)}%
+                    {Math.round(fileData.progress!.progress_percentage!)}%
                   </span>
                 </div>
               </div>

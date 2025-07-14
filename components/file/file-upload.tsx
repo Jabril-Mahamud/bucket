@@ -3,14 +3,32 @@
 
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { UploadCloud, FileText, Headphones, XCircle, RefreshCw } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { UploadCloud, FileText, Headphones, XCircle, RefreshCw, AlertTriangle, Info } from "lucide-react";
 import { toast } from "sonner";
 
 interface FileUploadProps {
   onUploadComplete: () => void;
+}
+
+interface UsageInfo {
+  currentUsage?: {
+    uploads: number;
+    ttsCharacters: number;
+    storageGB: number;
+  };
+  limits?: {
+    uploads: number;
+    ttsCharacters: number;
+    storageGB: number;
+  };
+  planName?: string;
+  remaining?: {
+    uploads: number;
+    storageGB: number;
+  };
 }
 
 export function FileUpload({ onUploadComplete }: FileUploadProps) {
@@ -18,7 +36,8 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fileName, setFileName] = useState("");
   const [currentStep, setCurrentStep] = useState<"uploading" | "converting" | "done">("uploading");
-  const supabase = createClient();
+  const [usageError, setUsageError] = useState<string | null>(null);
+  const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null);
 
   const isConvertibleFile = (fileType: string) => {
     const supportedTypes = [
@@ -45,16 +64,10 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     setUploading(true);
     setUploadProgress(0);
     setCurrentStep("uploading");
+    setUsageError(null);
+    setUsageInfo(null);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("You must be logged in to upload files.");
-        setUploading(false);
-        return;
-      }
-
-      // Check if file can be converted to text
       if (isConvertibleFile(file.type)) {
         // Convert file to text instead of storing original
         setCurrentStep("converting");
@@ -68,13 +81,18 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
           body: formData,
         });
 
+        const convertResult = await convertResponse.json();
+
         if (!convertResponse.ok) {
-          const errorData = await convertResponse.json();
-          throw new Error(errorData.error || 'Conversion failed');
+          if (convertResponse.status === 429) {
+            // Usage limit error
+            setUsageError(convertResult.error);
+            setUsageInfo(convertResult.usageInfo);
+            return;
+          }
+          throw new Error(convertResult.error || 'Conversion failed');
         }
 
-        const convertResult = await convertResponse.json();
-        
         if (!convertResult.success) {
           throw new Error(convertResult.error || 'Conversion failed');
         }
@@ -82,52 +100,46 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         setUploadProgress(100);
         setCurrentStep("done");
         toast.success(`File converted to text successfully! (${convertResult.textLength} characters)`);
-
-      } else {
-        // For audio files and other non-convertible files, upload normally
-        const filePath = `${user.id}/${Date.now()}-${file.name}`;
-
-        setUploadProgress(25);
-
-        const { error: uploadError } = await supabase.storage
-          .from("user-files")
-          .upload(filePath, file, {
-            cacheControl: "3600",
-            upsert: false,
-          });
-
-        if (uploadError) throw uploadError;
-
-        setUploadProgress(75);
-
-        // Insert file metadata into the database
-        const { data: fileRecord, error: dbError } = await supabase
-          .from("files")
-          .insert({
-            user_id: user.id,
-            filename: file.name,
-            file_path: filePath,
-            file_size: file.size,
-            file_type: file.type,
-          })
-          .select()
-          .single();
-
-        if (dbError) {
-          // Clean up storage if database insert fails
-          await supabase.storage
-            .from("user-files")
-            .remove([filePath]);
-          throw dbError;
+        
+        if (convertResult.usageInfo) {
+          setUsageInfo(convertResult.usageInfo);
         }
 
-        if (!fileRecord) {
-          throw new Error("Failed to create file record");
+      } else {
+        // For audio files and other non-convertible files, use upload API
+        setUploadProgress(25);
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const uploadResult = await uploadResponse.json();
+
+        if (!uploadResponse.ok) {
+          if (uploadResponse.status === 429) {
+            // Usage limit error
+            setUsageError(uploadResult.error);
+            setUsageInfo(uploadResult.usageInfo);
+            return;
+          }
+          throw new Error(uploadResult.error || 'Upload failed');
+        }
+
+        if (!uploadResult.success) {
+          throw new Error(uploadResult.error || 'Upload failed');
         }
 
         setUploadProgress(100);
         setCurrentStep("done");
         toast.success("File uploaded successfully!");
+        
+        if (uploadResult.usageInfo) {
+          setUsageInfo(uploadResult.usageInfo);
+        }
       }
 
       onUploadComplete();
@@ -140,11 +152,12 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       setFileName("");
       setCurrentStep("uploading");
     }
-  }, [onUploadComplete, supabase]);
+  }, [onUploadComplete]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     multiple: false,
+    disabled: uploading,
     accept: {
       'application/pdf': ['.pdf'],
       'text/plain': ['.txt'],
@@ -184,13 +197,75 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     }
   };
 
+  const clearError = () => {
+    setUsageError(null);
+    setUsageInfo(null);
+  };
+
   return (
     <div className="space-y-4">
+      {/* Usage Limit Error */}
+      {usageError && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex justify-between items-start">
+            <div className="space-y-2">
+              <p className="font-medium">{usageError}</p>
+              {usageInfo && (
+                <div className="text-sm space-y-1">
+                  <p><strong>Current Plan:</strong> {usageInfo.planName || 'Free'}</p>
+                  {usageInfo.currentUsage && usageInfo.limits && (
+                    <div className="space-y-1">
+                      <p><strong>Monthly Usage:</strong></p>
+                      <ul className="list-disc list-inside space-y-0.5 ml-2">
+                        <li>Uploads: {usageInfo.currentUsage.uploads}/{usageInfo.limits.uploads === -1 ? 'Unlimited' : usageInfo.limits.uploads}</li>
+                        <li>Storage: {usageInfo.currentUsage.storageGB.toFixed(2)}/{usageInfo.limits.storageGB}GB</li>
+                      </ul>
+                    </div>
+                  )}
+                  <p className="text-xs mt-2">Consider upgrading your plan for higher limits.</p>
+                </div>
+              )}
+            </div>
+            <Button variant="ghost" size="sm" onClick={clearError}>
+              <XCircle className="h-4 w-4" />
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Success Usage Info */}
+      {!usageError && usageInfo && !uploading && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            <div className="text-sm space-y-1">
+              <p><strong>Upload successful!</strong> Remaining this month:</p>
+              <ul className="list-disc list-inside space-y-0.5 ml-2">
+                {usageInfo.remaining && (
+                  <>
+                    <li>Uploads: {Math.floor(usageInfo.remaining.uploads)}</li>
+                    <li>Storage: {usageInfo.remaining.storageGB.toFixed(2)}GB</li>
+                  </>
+                )}
+              </ul>
+              <p className="text-xs text-muted-foreground mt-1">Plan: {usageInfo.planName || 'Free'}</p>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div
         {...getRootProps()}
-        className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
+        className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+          isDragActive 
+            ? "border-primary bg-primary/5" 
+            : usageError 
+              ? "border-gray-300 dark:border-gray-700 cursor-not-allowed opacity-50"
+              : "border-gray-300 dark:border-gray-700 hover:border-primary"
+        }`}
       >
-        <input {...getInputProps()} />
+        <input {...getInputProps()} disabled={!!usageError} />
         {uploading ? (
           <div className="flex flex-col items-center space-y-3">
             {getStepIcon()}
@@ -207,20 +282,26 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
           </div>
         ) : (
           <div className="flex flex-col items-center space-y-3">
-            <UploadCloud className="h-10 w-10 text-muted-foreground" />
+            <UploadCloud className={`h-10 w-10 ${usageError ? 'text-muted-foreground' : 'text-muted-foreground'}`} />
             {isDragActive ? (
               <p className="text-lg font-medium">Drop the files here ...</p>
+            ) : usageError ? (
+              <p className="text-lg font-medium text-muted-foreground">Upload limit reached</p>
             ) : (
               <p className="text-lg font-medium">Drag & drop a file here, or click to select one</p>
             )}
-            <div className="text-sm text-muted-foreground space-y-1">
-              <p><strong>Documents:</strong> PDF, DOC, DOCX, TXT, EPUB, RTF, HTML, Markdown</p>
-              <p><strong>Audio:</strong> MP3, WAV, OGG, M4A</p>
-              <p className="text-xs text-blue-600">Documents will be automatically converted to searchable text</p>
-            </div>
-            <Button variant="outline" className="mt-4">
-              Select File
-            </Button>
+            {!usageError && (
+              <>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p><strong>Documents:</strong> PDF, DOC, DOCX, TXT, EPUB, RTF, HTML, Markdown</p>
+                  <p><strong>Audio:</strong> MP3, WAV, OGG, M4A</p>
+                  <p className="text-xs text-blue-600">Documents will be automatically converted to searchable text</p>
+                </div>
+                <Button variant="outline" className="mt-4">
+                  Select File
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>

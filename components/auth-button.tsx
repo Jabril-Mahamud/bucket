@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Button } from "./ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "./logout-button";
-import { Settings, ChevronDown } from "lucide-react";
+import { Settings, ChevronDown, CreditCard, Crown, TrendingUp } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +31,16 @@ export async function AuthButton() {
     const userInitials = getUserInitials(user.email || '');
     const userName = user.email?.split('@')[0] || 'User';
 
+    // Get subscription info for the dropdown
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .select('plan_name, status')
+      .eq('user_id', user.id)
+      .single();
+
+    const planName = subscription?.plan_name || 'free';
+    const isActive = subscription?.status === 'active';
+
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -55,6 +65,14 @@ export async function AuthButton() {
               <p className="text-xs leading-none text-muted-foreground truncate">
                 {user.email}
               </p>
+              <div className="flex items-center gap-1 mt-1">
+                <span className="text-xs text-muted-foreground capitalize">
+                  {planName} Plan
+                </span>
+                {planName !== 'free' && isActive && (
+                  <Crown className="h-3 w-3 text-amber-500" />
+                )}
+              </div>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -65,6 +83,22 @@ export async function AuthButton() {
               Settings
             </Link>
           </DropdownMenuItem>
+
+          <DropdownMenuItem asChild>
+            <Link href="/subscription">
+              <CreditCard className="mr-2 h-4 w-4" />
+              Subscription
+            </Link>
+          </DropdownMenuItem>
+
+          {planName === 'free' && (
+            <DropdownMenuItem asChild>
+              <Link href="/pricing">
+                <TrendingUp className="mr-2 h-4 w-4" />
+                Upgrade Plan
+              </Link>
+            </DropdownMenuItem>
+          )}
           
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>

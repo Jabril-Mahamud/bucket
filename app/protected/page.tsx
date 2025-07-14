@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-
 import { createClient } from "@/lib/supabase/server";
 import { InfoIcon } from "lucide-react";
 import { TTSUsageDashboard } from "@/components/tts/usage-dashboard";
+import { UsageIndicator } from "@/components/billing/usage-indicator";
 
 export default async function ProtectedPage() {
   const supabase = await createClient();
@@ -17,16 +17,22 @@ export default async function ProtectedPage() {
       <div className="w-full">
         <div className="bg-accent text-sm p-3 px-5 rounded-md text-foreground flex gap-3 items-center">
           <InfoIcon size="16" strokeWidth={2} />
-          This is a protected page that you can only see as an authenticated
-          user
+          This is a protected page that you can only see as an authenticated user
         </div>
       </div>
+
+      {/* Usage Overview */}
       <div className="flex flex-col gap-2 items-start">
-        <h2 className="font-bold text-2xl mb-4">Your usage</h2>
-        <TTSUsageDashboard />
+        <h2 className="font-bold text-2xl mb-4">Usage & Subscription</h2>
+        <div className="w-full max-w-2xl">
+          <UsageIndicator />
+        </div>
       </div>
-      <div>
-        
+
+      {/* Detailed TTS Usage */}
+      <div className="flex flex-col gap-2 items-start">
+        <h2 className="font-bold text-2xl mb-4">TTS Usage Details</h2>
+        <TTSUsageDashboard />
       </div>
     </div>
   );

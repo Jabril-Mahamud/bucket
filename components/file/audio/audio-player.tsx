@@ -88,7 +88,7 @@ export function AudioPlayer({
 
       if (audioFile.progress?.last_position) {
         const lastTime = parseFloat(audioFile.progress.last_position);
-        if (lastTime > 0 && lastTime < audio.duration) {
+        if (!isNaN(lastTime) && lastTime > 0 && lastTime < audio.duration) {
           audio.currentTime = lastTime;
           setState((prev) => ({ ...prev, currentTime: lastTime }));
         }

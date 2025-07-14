@@ -3,8 +3,14 @@ import { BookOpen, Library } from "lucide-react";
 import { AuthButton } from "./auth-button";
 import { Button } from "./ui/button";
 import { ThemeSwitcher } from "./theme-switcher";
+import { createClient } from "@/lib/supabase/server";
+import { UsageIndicator } from "./billing/usage-indicator";
 
-export function Header() {
+export async function Header() {
+  // Check if user is authenticated to show usage indicator
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -30,9 +36,20 @@ export function Header() {
                 Library
               </Link>
             </Button>
-            
+            <Button asChild variant="ghost" size="sm" className="h-8 px-3">
+              <Link href="/pricing" className="text-sm font-medium">
+                Pricing
+              </Link>
+            </Button>
           </nav>
         </div>
+
+        {/* Center - Usage Indicator for authenticated users */}
+        {user && (
+          <div className="hidden lg:flex flex-1 justify-center max-w-md">
+            <UsageIndicator compact className="w-full" />
+          </div>
+        )}
 
         <div className="flex items-center gap-1">
           {/* Mobile Navigation Links */}
@@ -49,6 +66,13 @@ export function Header() {
           <ThemeSwitcher />
         </div>
       </div>
+      
+      {/* Mobile Usage Indicator */}
+      {user && (
+        <div className="lg:hidden border-t border-border/50 px-4 py-2">
+          <UsageIndicator compact />
+        </div>
+      )}
     </header>
   );
 }

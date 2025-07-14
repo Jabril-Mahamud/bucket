@@ -18,8 +18,8 @@ export type FileProgressData = {
 export type FileWithProgressData = DatabaseFile & {
   file_progress?: FileProgressData[] | null;
   progress?: {
-    progress_percentage: number;
-    last_position: string;
+    progress_percentage: number | null;  // Changed from 'number' to 'number | null'
+    last_position: string | null;        // Changed from 'string' to 'string | null'
   } | null;
 };
 

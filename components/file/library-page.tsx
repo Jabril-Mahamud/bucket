@@ -247,6 +247,13 @@ export function LibraryPage() {
     return <Eye className="h-3 w-3" />;
   };
 
+  // Helper function to check if file has valid progress
+  const hasValidProgress = (file: LibraryFile) => {
+    return file.progress && 
+           file.progress.progress_percentage !== null && 
+           file.progress.progress_percentage > 0;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh] sm:min-h-[60vh]">
@@ -420,16 +427,16 @@ export function LibraryPage() {
               
               <CardContent className="space-y-4 text-sm">
                 {/* Progress Bar */}
-                {file.progress && file.progress.progress_percentage !== null && file.progress.progress_percentage > 0 && (
+                {hasValidProgress(file) && (
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-medium text-muted-foreground">
                       <span>Progress</span>
-                      <span>{Math.round(file.progress.progress_percentage)}%</span>
+                      <span>{Math.round(file.progress!.progress_percentage!)}%</span>
                     </div>
                     <div className="w-full bg-secondary rounded-full h-1.5">
                       <div 
                         className="bg-primary h-1.5 rounded-full transition-all"
-                        style={{ width: `${file.progress.progress_percentage}%` }}
+                        style={{ width: `${file.progress!.progress_percentage!}%` }}
                       />
                     </div>
                   </div>
@@ -498,12 +505,12 @@ export function LibraryPage() {
                         <span>{formatFileSize(file.file_size)}</span>
                         <span className="hidden sm:inline text-muted-foreground/50">•</span>
                         <span>{formatDate(file.uploaded_at)}</span>
-                        {file.progress && file.progress.progress_percentage !== null && file.progress.progress_percentage > 0 && (
+                        {hasValidProgress(file) && (
                           <>
                             <span className="hidden sm:inline text-muted-foreground/50">•</span>
                             <span className="text-primary font-medium flex items-center gap-1.5">
                               <div className="w-2 h-2 rounded-full bg-primary"/>
-                              {Math.round(file.progress.progress_percentage)}% complete
+                              {Math.round(file.progress!.progress_percentage!)}% complete
                             </span>
                           </>
                         )}
