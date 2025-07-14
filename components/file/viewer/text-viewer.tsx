@@ -182,21 +182,6 @@ export function TextViewer({
                   </Button>
                 )}
               </div>
-
-              {/* Selection Info */}
-              {selectedText && (
-                <div className="p-3 bg-muted/50 border rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Selected Text</span>
-                    <span className="text-xs text-muted-foreground">
-                      {selectedText.length} characters
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground italic line-clamp-2">
-                    &quot;{selectedText}&quot;
-                  </p>
-                </div>
-              )}
             </div>
 
             <ContextMenu>
