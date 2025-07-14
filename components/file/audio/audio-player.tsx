@@ -8,24 +8,12 @@ import {
   Pause, 
   Loader2, 
   ChevronDown, 
-  BookmarkPlus,
   VolumeX,
   Volume1,
-  Volume2,
-  Clock,
-  Scissors
+  Volume2
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { FileWithProgressData, FileBookmark } from "@/lib/types";
+import { FileWithProgressData } from "@/lib/types";
 import { useFileProgress } from "@/hooks/useFileProgress";
-import { BookmarkTooltip } from "@/components/bookmarks/bookmark-tooltip";
-import { BookmarkIndicator } from "@/components/bookmarks/bookmark-indicator";
 
 interface AudioState {
   isLoading: boolean;
@@ -49,30 +37,16 @@ const initialAudioState: AudioState = {
 
 interface AudioPlayerProps {
   audioFile: FileWithProgressData;
-  bookmarks?: FileBookmark[];
-  onCreateBookmark?: (timestamp: number, endTimestamp?: number) => void;
-  onBookmarkClick?: (bookmark: FileBookmark) => void;
   onSeek?: (seekFn: (time: number) => void) => void;
 }
 
 export function AudioPlayer({
   audioFile,
-  bookmarks = [],
-  onCreateBookmark,
-  onBookmarkClick,
   onSeek,
 }: AudioPlayerProps) {
   const [state, setState] = useState<AudioState>(initialAudioState);
-  const [rangeStart, setRangeStart] = useState<number | null>(null);
-  const [isSelectingRange, setIsSelectingRange] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { updateProgress, updateProgressImmediate } = useFileProgress();
-
-  // Debug logging
-  useEffect(() => {
-    console.log('AudioPlayer bookmarks:', bookmarks);
-    console.log('AudioPlayer onCreateBookmark:', !!onCreateBookmark);
-  }, [bookmarks, onCreateBookmark]);
 
   useEffect(() => {
     setState(initialAudioState);
@@ -280,77 +254,7 @@ export function AudioPlayer({
     const percentage = x / rect.width;
     const clickTime = percentage * state.duration;
     
-    console.log('Progress click:', { clickTime, isSelectingRange, rangeStart });
-    
-    if (isSelectingRange && rangeStart === null) {
-      // First click - set start time
-      setRangeStart(clickTime);
-      console.log('Set range start:', clickTime);
-    } else if (isSelectingRange && rangeStart !== null) {
-      // Second click - set end time and create range bookmark
-      const endTime = clickTime;
-      const startTime = Math.min(rangeStart, endTime);
-      const finalEndTime = Math.max(rangeStart, endTime);
-      
-      console.log('Creating range bookmark:', { startTime, finalEndTime });
-      
-      if (onCreateBookmark) {
-        onCreateBookmark(startTime, finalEndTime);
-      }
-      
-      // Reset range selection
-      setRangeStart(null);
-      setIsSelectingRange(false);
-    } else {
-      // Normal seek behavior
-      seek(clickTime);
-    }
-  };
-
-  // Fixed: Better validation for bookmark creation
-  const canCreateBookmark = () => {
-    return onCreateBookmark && state.duration > 0 && !isNaN(state.currentTime);
-  };
-
-  const handleCreateTimestampBookmark = () => {
-    console.log('Creating timestamp bookmark at:', state.currentTime);
-    
-    if (!canCreateBookmark()) {
-      console.warn('Cannot create bookmark: missing callback or invalid state', {
-        hasCallback: !!onCreateBookmark,
-        duration: state.duration,
-        currentTime: state.currentTime
-      });
-      return;
-    }
-
-    onCreateBookmark!(state.currentTime);
-  };
-
-  const handleStartRangeSelection = () => {
-    if (!canCreateBookmark()) {
-      console.warn('Cannot start range selection: missing callback or invalid state');
-      return;
-    }
-
-    console.log('Starting range selection');
-    setIsSelectingRange(true);
-    setRangeStart(null);
-  };
-
-  const handleCancelRangeSelection = () => {
-    console.log('Canceling range selection');
-    setIsSelectingRange(false);
-    setRangeStart(null);
-  };
-
-  const handleBookmarkClick = (bookmark: FileBookmark) => {
-    console.log('Bookmark clicked:', bookmark);
-    if (bookmark.position_data.type === 'audio') {
-      const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
-      seek(audioData.timestamp);
-    }
-    onBookmarkClick?.(bookmark);
+    seek(clickTime);
   };
 
   // Expose seek function via onSeek prop
@@ -381,28 +285,6 @@ export function AudioPlayer({
     );
   }
 
-  // Filter bookmarks for audio
-  const audioBookmarks = bookmarks.filter(bookmark => 
-    bookmark.position_data.type === 'audio'
-  );
-
-  // Get range bookmarks for visual representation
-  const rangeBookmarks = audioBookmarks.filter(bookmark => {
-    const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
-    return audioData.end_timestamp !== undefined;
-  });
-
-  const pointBookmarks = audioBookmarks.filter(bookmark => {
-    const audioData = bookmark.position_data as { timestamp: number; end_timestamp?: number };
-    return audioData.end_timestamp === undefined;
-  });
-
-  console.log('Rendering bookmarks:', { 
-    audioBookmarks: audioBookmarks.length, 
-    rangeBookmarks: rangeBookmarks.length, 
-    pointBookmarks: pointBookmarks.length 
-  });
-
   return (
     <div className="bg-background border border-border rounded-lg">
       <audio ref={audioRef} preload="metadata" />
@@ -425,12 +307,10 @@ export function AudioPlayer({
           </Button>
 
           <div className="flex-1 min-w-0">
-            {/* Progress Bar with Bookmarks */}
+            {/* Progress Bar */}
             <div className="relative">
               <div
-                className={`w-full bg-secondary rounded-full h-2 md:h-3 cursor-pointer touch-manipulation relative ${
-                  isSelectingRange ? 'ring-2 ring-primary ring-offset-2' : ''
-                }`}
+                className="w-full bg-secondary rounded-full h-2 md:h-3 cursor-pointer touch-manipulation relative"
                 onClick={handleProgressClick}
               >
                 {/* Main progress */}
@@ -440,133 +320,13 @@ export function AudioPlayer({
                     width: `${state.duration > 0 ? (state.currentTime / state.duration) * 100 : 0}%`,
                   }}
                 />
-
-                {/* Range bookmark backgrounds */}
-                {state.duration > 0 && rangeBookmarks.map((bookmark) => {
-                  const audioData = bookmark.position_data as {
-                    type: "audio";
-                    timestamp: number;
-                    end_timestamp: number;
-                  };
-                  const startPercent = (audioData.timestamp / state.duration) * 100;
-                  const endPercent = (audioData.end_timestamp / state.duration) * 100;
-                  
-                  return (
-                    <div
-                      key={`range-${bookmark.id}`}
-                      className="absolute top-0 h-full rounded-full opacity-30 z-0"
-                      style={{
-                        left: `${startPercent}%`,
-                        width: `${endPercent - startPercent}%`,
-                        backgroundColor: `hsl(var(--${bookmark.color}-500))`,
-                      }}
-                    />
-                  );
-                })}
-
-                {/* Range selection preview */}
-                {isSelectingRange && rangeStart !== null && state.duration > 0 && (
-                  <div
-                    className="absolute top-0 h-full bg-primary/40 rounded-full z-5"
-                    style={{
-                      left: `${Math.min((rangeStart / state.duration) * 100, (state.currentTime / state.duration) * 100)}%`,
-                      width: `${Math.abs((state.currentTime - rangeStart) / state.duration) * 100}%`,
-                    }}
-                  />
-                )}
               </div>
-
-              {/* Point Bookmark Indicators */}
-              {state.duration > 0 && pointBookmarks.map((bookmark) => {
-                const audioData = bookmark.position_data as {
-                  type: "audio";
-                  timestamp: number;
-                };
-                const leftPercent = (audioData.timestamp / state.duration) * 100;
-                
-                return (
-                  <BookmarkTooltip
-                    key={bookmark.id}
-                    bookmark={bookmark}
-                    onBookmarkClick={handleBookmarkClick}
-                  >
-                    <div
-                      className="absolute top-0 transform -translate-x-1/2 cursor-pointer z-20"
-                      style={{
-                        left: `${leftPercent}%`,
-                      }}
-                    >
-                      <BookmarkIndicator
-                        color={bookmark.color}
-                        size="sm"
-                        variant="icon"
-                        className="mt-1"
-                      />
-                    </div>
-                  </BookmarkTooltip>
-                );
-              })}
-
-              {/* Range bookmark start/end indicators */}
-              {state.duration > 0 && rangeBookmarks.map((bookmark) => {
-                const audioData = bookmark.position_data as {
-                  type: "audio";
-                  timestamp: number;
-                  end_timestamp: number;
-                };
-                const leftPercent = (audioData.timestamp / state.duration) * 100;
-                
-                return (
-                  <BookmarkTooltip
-                    key={`range-indicator-${bookmark.id}`}
-                    bookmark={bookmark}
-                    onBookmarkClick={handleBookmarkClick}
-                  >
-                    <div
-                      className="absolute top-0 transform -translate-x-1/2 cursor-pointer z-20"
-                      style={{
-                        left: `${leftPercent}%`,
-                      }}
-                    >
-                      <div className="flex items-center">
-                        <BookmarkIndicator
-                          color={bookmark.color}
-                          size="sm"
-                          variant="icon"
-                          className="mt-1"
-                        />
-                        <div className="w-1 h-4 bg-current opacity-60 mt-1" />
-                      </div>
-                    </div>
-                  </BookmarkTooltip>
-                );
-              })}
-
-              {/* Range selection start indicator */}
-              {isSelectingRange && rangeStart !== null && state.duration > 0 && (
-                <div
-                  className="absolute top-0 transform -translate-x-1/2 z-20"
-                  style={{
-                    left: `${(rangeStart / state.duration) * 100}%`,
-                  }}
-                >
-                  <div className="w-1 h-6 bg-primary mt-0.5" />
-                </div>
-              )}
             </div>
 
             <div className="flex justify-between items-center mt-1">
               <span className="text-xs text-muted-foreground">
                 {formatTime(state.currentTime)}
               </span>
-              {isSelectingRange && (
-                <span className="text-xs text-primary font-medium">
-                  {rangeStart === null 
-                    ? "Click to set start time" 
-                    : "Click to set end time"
-                  }
-                </span>
-              )}
               <span className="text-xs text-muted-foreground">
                 {formatTime(state.duration)}
               </span>
@@ -574,44 +334,6 @@ export function AudioPlayer({
           </div>
 
           <div className="flex items-center gap-1">
-            {/* Fixed Bookmark Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  title="Add bookmark"
-                  disabled={!canCreateBookmark()}
-                >
-                  <BookmarkPlus className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem 
-                  onClick={handleCreateTimestampBookmark}
-                  disabled={!canCreateBookmark()}
-                >
-                  <Clock className="mr-2 h-4 w-4" />
-                  Bookmark Current Time
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {!isSelectingRange ? (
-                  <DropdownMenuItem 
-                    onClick={handleStartRangeSelection}
-                    disabled={!canCreateBookmark()}
-                  >
-                    <Scissors className="mr-2 h-4 w-4" />
-                    Select Time Range
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem onClick={handleCancelRangeSelection}>
-                    Cancel Range Selection
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             <div className="hidden md:flex items-center gap-1">
               <Button
                 variant="ghost"
