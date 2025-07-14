@@ -8,35 +8,18 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import {
   BookOpen,
   Headphones,
   Volume2,
   Loader2,
   Copy,
-  Search,
-  BookmarkPlus,
-  List,
-  Bookmark,
-  Edit,
-  Trash2,
+  Search
 } from "lucide-react";
-import { FileWithProgressData, BookmarkPositionData, CreateBookmarkData, UpdateBookmarkData, FileBookmark } from "@/lib/types";
-import { useBookmarks } from "@/hooks/useBookmarks";
+import { FileWithProgressData } from "@/lib/types";
 import { useTTS } from "@/hooks/useTTS";
-import { BookmarkDialog } from "@/components/bookmarks/bookmark-dialog";
-import { BookmarksList } from "@/components/bookmarks/bookmarks-list";
 import { AudioPlayer } from "../audio/audio-player";
 import { TextContent } from "../text-content";
 import { toast } from "sonner";
@@ -55,176 +38,33 @@ export function TextViewer({
   onRefresh 
 }: TextViewerProps) {
   const [selectedText, setSelectedText] = useState<string>("");
-  const [selectedRange, setSelectedRange] = useState<{
-    start: number;
-    end: number;
-  } | null>(null);
-  const [isBookmarkDialogOpen, setIsBookmarkDialogOpen] = useState(false);
-  const [bookmarkPosition, setBookmarkPosition] = useState<BookmarkPositionData | undefined>(undefined);
-  const [bookmarkTextPreview, setBookmarkTextPreview] = useState<string>("");
-  const [isBookmarksSheetOpen, setIsBookmarksSheetOpen] = useState(false);
-  const [clickedBookmark, setClickedBookmark] = useState<FileBookmark | undefined>(undefined);
-  const [editingBookmark, setEditingBookmark] = useState<FileBookmark | undefined>(undefined);
 
   // We'll use this ref to get the actual text content element from TextContent
   const textContentRef = useRef<HTMLDivElement | null>(null);
 
-  // Hooks
-  const {
-    bookmarks,
-    createBookmark,
-    updateBookmark,
-    deleteBookmark,
-    isLoading: bookmarksLoading,
-  } = useBookmarks({ autoLoad: true, fileId });
-
   const { convertToSpeech, isLoading: isTtsLoading } = useTTS();
-
-  // Wrapper functions to match BookmarksList interface
-  const handleBookmarkUpdate = async (id: string, data: UpdateBookmarkData): Promise<void> => {
-    await updateBookmark(id, data);
-  };
-
-  const handleBookmarkDelete = async (id: string): Promise<void> => {
-    await deleteBookmark(id);
-  };
 
   // Improved text selection handler that works with any text container
   const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       setSelectedText("");
-      setSelectedRange(null);
       return;
     }
 
     const selectedText = selection.toString().trim();
     if (!selectedText) {
       setSelectedText("");
-      setSelectedRange(null);
       return;
     }
 
     setSelectedText(selectedText);
-
-    // Get the range and calculate character position
-    const range = selection.getRangeAt(0);
-    
-    // Find the text container - either from our ref or by finding the prose container
-    let textContainer = textContentRef.current;
-    if (!textContainer) {
-      // Fallback: find the prose container in the document
-      textContainer = document.querySelector('.prose') as HTMLDivElement;
-    }
-
-    if (textContainer) {
-      try {
-        // Create a range from the start of the text container to the start of selection
-        const preCaretRange = document.createRange();
-        preCaretRange.selectNodeContents(textContainer);
-        preCaretRange.setEnd(range.startContainer, range.startOffset);
-        
-        const start = preCaretRange.toString().length;
-        const end = start + selectedText.length;
-
-        setSelectedRange({ start, end });
-        
-        // Debug logging
-        console.log('Text selection:', { selectedText, start, end });
-      } catch (error) {
-        console.error('Error calculating text position:', error);
-        // Fallback: use a simple character count
-        setSelectedRange({ start: 0, end: selectedText.length });
-      }
-    } else {
-      console.warn('Text container not found, using fallback range');
-      // Fallback range
-      setSelectedRange({ start: 0, end: selectedText.length });
-    }
   }, []);
 
   const handleCopyText = () => {
     if (selectedText) {
       navigator.clipboard.writeText(selectedText);
       toast.success("Text copied to clipboard");
-    }
-  };
-
-  const handleCreateBookmark = () => {
-    if (!selectedText) {
-      toast.error("Please select some text to bookmark");
-      return;
-    }
-
-    // Use selectedRange if available, otherwise fallback to basic position
-    const characterPosition = selectedRange?.start ?? 0;
-    
-    const positionData: BookmarkPositionData = {
-      type: "text",
-      character: characterPosition,
-      paragraph: Math.floor(characterPosition / 500) + 1, // Simple paragraph calculation
-    };
-
-    setBookmarkPosition(positionData);
-    setBookmarkTextPreview(selectedText);
-    setEditingBookmark(undefined);
-    setIsBookmarkDialogOpen(true);
-    
-    console.log('Creating bookmark:', { positionData, selectedText });
-  };
-
-  const handleBookmarkSave = async (data: CreateBookmarkData | UpdateBookmarkData) => {
-    if ("file_id" in data) {
-      // Creating new bookmark
-      await createBookmark(data as CreateBookmarkData);
-      toast.success("Bookmark created successfully");
-    } else {
-      // Updating existing bookmark
-      if (editingBookmark) {
-        await updateBookmark(editingBookmark.id, data);
-        toast.success("Bookmark updated successfully");
-      }
-    }
-    
-    // Clear selection and close dialog
-    setSelectedText("");
-    setSelectedRange(null);
-    setBookmarkTextPreview("");
-    setEditingBookmark(undefined);
-    
-    // Clear the browser text selection
-    window.getSelection()?.removeAllRanges();
-  };
-
-  const handleBookmarkClick = useCallback(
-    (bookmark: FileBookmark) => {
-      if (bookmark.position_data?.type === "text") {
-        const characterPos = bookmark.position_data.character;
-        // Scroll to bookmark position (simplified - you might want more sophisticated scrolling)
-        if (textContentRef.current) {
-          const element = textContentRef.current;
-          // Simple scroll calculation - this could be improved
-          const scrollPercentage = Math.min(characterPos / 10000, 1);
-          element.scrollTop = scrollPercentage * element.scrollHeight;
-        }
-      }
-    },
-    []
-  );
-
-  const handleEditBookmark = (bookmark: FileBookmark) => {
-    setEditingBookmark(bookmark);
-    setBookmarkPosition(bookmark.position_data);
-    setBookmarkTextPreview(bookmark.text_preview || "");
-    setIsBookmarkDialogOpen(true);
-  };
-
-  const handleDeleteBookmark = async (bookmark: FileBookmark) => {
-    try {
-      await deleteBookmark(bookmark.id);
-      toast.success("Bookmark deleted successfully");
-    } catch {
-      toast.error("Failed to delete bookmark");
     }
   };
 
@@ -283,22 +123,6 @@ export function TextViewer({
     }
   };
 
-  const findBookmarkAtPosition = (clientX: number, clientY: number): FileBookmark | undefined => {
-    const element = document.elementFromPoint(clientX, clientY);
-    if (!element) return undefined;
-
-    // Check if the clicked element or its parent has bookmark data
-    let currentElement = element as HTMLElement;
-    while (currentElement && currentElement !== textContentRef.current) {
-      const bookmarkId = currentElement.getAttribute("data-bookmark-id");
-      if (bookmarkId) {
-        return bookmarks.find((b) => b.id === bookmarkId);
-      }
-      currentElement = currentElement.parentElement as HTMLElement;
-    }
-    return undefined;
-  };
-
   // Callback to receive the text content ref from TextContent component
   const handleTextContentRef = useCallback((ref: HTMLDivElement | null) => {
     textContentRef.current = ref;
@@ -334,13 +158,6 @@ export function TextViewer({
                     Audio Available
                   </Badge>
                 )}
-                <Badge
-                  variant="outline"
-                  className="text-amber-600 border-amber-600"
-                >
-                  <Bookmark className="h-3 w-3 mr-1" />
-                  {bookmarks.length} Bookmarks
-                </Badge>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -364,66 +181,7 @@ export function TextViewer({
                     )}
                   </Button>
                 )}
-
-                {/* Bookmarks Sheet Trigger */}
-                <Sheet
-                  open={isBookmarksSheetOpen}
-                  onOpenChange={setIsBookmarksSheetOpen}
-                >
-                  <SheetTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2">
-                      <List className="h-4 w-4" />
-                      Bookmarks ({bookmarks.length})
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="right" className="w-full sm:w-96">
-                    <SheetHeader>
-                      <SheetTitle>Bookmarks</SheetTitle>
-                      <SheetDescription>
-                        Manage your bookmarks for this document
-                      </SheetDescription>
-                    </SheetHeader>
-                    <div className="mt-6">
-                      <BookmarksList
-                        fileId={fileId}
-                        bookmarks={bookmarks}
-                        isLoading={bookmarksLoading}
-                        onBookmarkClick={handleBookmarkClick}
-                        onBookmarkUpdate={handleBookmarkUpdate}
-                        onBookmarkDelete={handleBookmarkDelete}
-                        onCreateBookmark={handleCreateBookmark}
-                      />
-                    </div>
-                  </SheetContent>
-                </Sheet>
-
-                {/* Manual Bookmark Button */}
-                <Button
-                  onClick={handleCreateBookmark}
-                  size="sm"
-                  variant="outline"
-                  className="gap-2"
-                >
-                  <BookmarkPlus className="h-4 w-4" />
-                  Add Bookmark
-                  {selectedText && <span className="text-xs">({selectedText.length} chars)</span>}
-                </Button>
               </div>
-
-              {/* Selection Info */}
-              {selectedText && (
-                <div className="p-3 bg-muted/50 border rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Selected Text</span>
-                    <span className="text-xs text-muted-foreground">
-                      {selectedText.length} characters
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground italic line-clamp-2">
-                    &quot;{selectedText}&quot;
-                  </p>
-                </div>
-              )}
             </div>
 
             <ContextMenu>
@@ -432,48 +190,14 @@ export function TextViewer({
                   <TextContent
                     fileId={fileId}
                     fileData={fileData}
-                    bookmarks={bookmarks}
                     onTextSelection={handleTextSelection}
-                    onBookmarkClick={handleBookmarkClick}
-                    onContextMenu={(e) => {
-                      // Find bookmark at click position
-                      const bookmark = findBookmarkAtPosition(e.clientX, e.clientY);
-                      setClickedBookmark(bookmark);
-                    }}
+                    onContextMenu={() => {}}
                     ref={handleTextContentRef}
                   />
                 </div>
               </ContextMenuTrigger>
 
               <ContextMenuContent className="w-64">
-                {/* Bookmark-specific actions when right-clicking on a bookmark */}
-                {clickedBookmark && (
-                  <>
-                    <ContextMenuItem
-                      onClick={() => handleEditBookmark(clickedBookmark)}
-                      className="gap-2 cursor-pointer"
-                    >
-                      <Edit className="h-4 w-4" />
-                      Edit Bookmark
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => handleDeleteBookmark(clickedBookmark)}
-                      className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete Bookmark
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => setIsBookmarksSheetOpen(true)}
-                      className="gap-2 cursor-pointer"
-                    >
-                      <List className="h-4 w-4" />
-                      View All Bookmarks
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                  </>
-                )}
-
                 {/* Text selection actions */}
                 {selectedText && (
                   <>
@@ -484,14 +208,6 @@ export function TextViewer({
                       <Copy className="h-4 w-4" />
                       Copy Text
                     </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={handleCreateBookmark}
-                      className="gap-2 cursor-pointer"
-                    >
-                      <BookmarkPlus className="h-4 w-4" />
-                      Add Bookmark
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
                   </>
                 )}
 
@@ -500,37 +216,11 @@ export function TextViewer({
                   <Search className="h-4 w-4" />
                   Search in Document
                 </ContextMenuItem>
-
-                {/* Show bookmarks sheet if no other actions are available */}
-                {!selectedText && !clickedBookmark && (
-                  <>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onClick={() => setIsBookmarksSheetOpen(true)}
-                      className="gap-2 cursor-pointer"
-                    >
-                      <List className="h-4 w-4" />
-                      View Bookmarks ({bookmarks.length})
-                    </ContextMenuItem>
-                  </>
-                )}
               </ContextMenuContent>
             </ContextMenu>
           </div>
         </div>
       </div>
-
-      {/* Bookmark Creation/Edit Dialog */}
-      <BookmarkDialog
-        open={isBookmarkDialogOpen}
-        onOpenChange={setIsBookmarkDialogOpen}
-        fileId={fileId}
-        positionData={bookmarkPosition}
-        textPreview={bookmarkTextPreview}
-        bookmark={editingBookmark}
-        onSave={handleBookmarkSave}
-        isLoading={false}
-      />
     </div>
   );
 }

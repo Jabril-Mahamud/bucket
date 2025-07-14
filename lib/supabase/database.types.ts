@@ -14,63 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      bookmarks: {
-        Row: {
-          color: string | null
-          color_index: number | null
-          created_at: string | null
-          file_id: string
-          id: string
-          note: string | null
-          position_data: Json
-          text_preview: string | null
-          title: string
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          color?: string | null
-          color_index?: number | null
-          created_at?: string | null
-          file_id: string
-          id?: string
-          note?: string | null
-          position_data: Json
-          text_preview?: string | null
-          title: string
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          color?: string | null
-          color_index?: number | null
-          created_at?: string | null
-          file_id?: string
-          id?: string
-          note?: string | null
-          position_data?: Json
-          text_preview?: string | null
-          title?: string
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "bookmarks_file_id_fkey"
-            columns: ["file_id"]
-            isOneToOne: false
-            referencedRelation: "files"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "bookmarks_file_id_fkey"
-            columns: ["file_id"]
-            isOneToOne: false
-            referencedRelation: "files_with_progress"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       collection_files: {
         Row: {
           added_at: string | null
@@ -529,72 +472,12 @@ export type Database = {
         Args: { filename: string }
         Returns: Json
       }
-      find_bookmarks_in_audio_range: {
-        Args: {
-          target_user_id: string
-          target_file_id: string
-          start_time?: number
-          end_time_param?: number
-        }
-        Returns: {
-          id: string
-          title: string
-          note: string
-          time_position: number
-          end_time_position: number
-          text_preview: string
-          color: string
-          color_index: number
-          created_at: string
-        }[]
-      }
-      find_bookmarks_in_text_range: {
-        Args: {
-          target_user_id: string
-          target_file_id: string
-          start_paragraph?: number
-          end_paragraph?: number
-        }
-        Returns: {
-          id: string
-          title: string
-          note: string
-          paragraph_num: number
-          character_pos: number
-          text_preview: string
-          color: string
-          color_index: number
-          created_at: string
-        }[]
-      }
-      generate_bookmark_color: {
-        Args: { bookmark_id: string }
-        Returns: string
-      }
-      generate_bookmark_color_index: {
-        Args: { bookmark_id: string }
-        Returns: number
-      }
       get_current_month_tts_usage: {
         Args: { target_user_id: string }
         Returns: {
           total_characters: number
           total_cost_cents: number
           current_month: string
-        }[]
-      }
-      get_file_bookmarks: {
-        Args: { target_user_id: string; target_file_id: string }
-        Returns: {
-          id: string
-          title: string
-          note: string
-          position_data: Json
-          text_preview: string
-          color: string
-          color_index: number
-          created_at: string
-          updated_at: string
         }[]
       }
       search_files: {
@@ -618,10 +501,6 @@ export type Database = {
           progress_percentage: number
           search_rank: number
         }[]
-      }
-      validate_bookmark_position_data: {
-        Args: { position_data: Json }
-        Returns: boolean
       }
     }
     Enums: {

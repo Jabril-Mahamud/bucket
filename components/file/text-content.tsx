@@ -1,19 +1,15 @@
 // components/file/text-content.tsx
 "use client";
 
-import { useState, useEffect, useCallback, forwardRef } from "react";
+import { useState, useEffect, forwardRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, FileText } from "lucide-react";
-import { FileWithProgressData, FileBookmark } from "@/lib/types";
-import { BookmarkTooltip } from "@/components/bookmarks/bookmark-tooltip";
-import { getBookmarkHighlightClasses } from "@/lib/bookmarks/bookmark-highlight-utils";
+import { FileWithProgressData } from "@/lib/types";
 
 interface TextContentProps {
   fileId: string;
   fileData: FileWithProgressData;
-  bookmarks: FileBookmark[];
   onTextSelection: () => void;
-  onBookmarkClick: (bookmark: FileBookmark) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }
 
@@ -21,9 +17,7 @@ export const TextContent = forwardRef<HTMLDivElement, TextContentProps>(
   function TextContent({
     fileId,
     fileData,
-    bookmarks,
     onTextSelection,
-    onBookmarkClick,
     onContextMenu,
   }, ref) {
     const [textContent, setTextContent] = useState<string | null>(null);
@@ -60,147 +54,27 @@ export const TextContent = forwardRef<HTMLDivElement, TextContentProps>(
       fetchTextContent();
     }, [fileId, fileData.text_content]);
 
-    const renderTextContentWithBookmarksAndRef = useCallback(() => {
+    const renderTextContent = () => {
       if (!textContent)
         return (
           <p className="text-muted-foreground">No text content available.</p>
         );
 
-      // Get text bookmarks and sort by character position
-      const textBookmarks = bookmarks
-        .filter((bookmark) => bookmark.position_data.type === "text")
-        .sort((a, b) => {
-          const aPos = (a.position_data as { character: number }).character;
-          const bPos = (b.position_data as { character: number }).character;
-          return aPos - bPos;
-        });
-
-      if (textBookmarks.length === 0) {
-        // No bookmarks, render normally with ref
-        const paragraphs = textContent.split("\n\n");
-        return (
-          <div className="space-y-6" ref={ref}>
-            {paragraphs.map((paragraph, pIndex) => (
-              <p
-                key={pIndex}
-                className="mb-6 last:mb-0 transition-colors duration-200"
-                id={`paragraph-${pIndex}`}
-              >
-                {paragraph}
-              </p>
-            ))}
-          </div>
-        );
-      }
-
-      // Create a map of bookmark positions
-      const bookmarkMap = new Map<number, FileBookmark>();
-      textBookmarks.forEach((bookmark) => {
-        const startPos = (bookmark.position_data as { character: number }).character;
-        bookmarkMap.set(startPos, bookmark);
-      });
-
-      // Split text by paragraphs first, then process each paragraph
       const paragraphs = textContent.split("\n\n");
-      let currentCharacterOffset = 0;
-
       return (
         <div className="space-y-6" ref={ref}>
-          {paragraphs.map((paragraph, pIndex) => {
-            const paragraphStart = currentCharacterOffset;
-            const paragraphEnd = currentCharacterOffset + paragraph.length;
-            
-            // Find bookmarks within this paragraph
-            const paragraphBookmarks = textBookmarks.filter((bookmark) => {
-              const bookmarkPos = (bookmark.position_data as { character: number }).character;
-              return bookmarkPos >= paragraphStart && bookmarkPos < paragraphEnd;
-            });
-
-            // Update character offset for next paragraph (+2 for \n\n)
-            currentCharacterOffset = paragraphEnd + 2;
-
-            if (paragraphBookmarks.length === 0) {
-              // No bookmarks in this paragraph
-              return (
-                <p
-                  key={pIndex}
-                  className="mb-6 last:mb-0 transition-colors duration-200"
-                  id={`paragraph-${pIndex}`}
-                >
-                  {paragraph}
-                </p>
-              );
-            }
-
-            // Render paragraph with bookmarks
-            const elements: React.ReactNode[] = [];
-            let currentPos = 0;
-
-            paragraphBookmarks.forEach((bookmark, bIndex) => {
-              const relativePos = (bookmark.position_data as { character: number }).character - paragraphStart;
-              const endPos = relativePos + (bookmark.text_preview?.length || 50);
-
-              // Add text before bookmark
-              if (relativePos > currentPos) {
-                elements.push(
-                  <span key={`text-${bIndex}`}>
-                    {paragraph.slice(currentPos, relativePos)}
-                  </span>
-                );
-              }
-
-              // Add highlighted bookmark text with the bookmark's color
-              const bookmarkText = paragraph.slice(
-                relativePos,
-                Math.min(endPos, paragraph.length)
-              );
-
-              if (bookmarkText) {
-                // Get the color-specific CSS classes
-                const highlightClasses = getBookmarkHighlightClasses(bookmark.color);
-                
-                elements.push(
-                  <BookmarkTooltip
-                    key={`bookmark-${bookmark.id}`}
-                    bookmark={bookmark}
-                    onBookmarkClick={onBookmarkClick}
-                  >
-                    <span
-                      data-bookmark-id={bookmark.id}
-                      className={`cursor-pointer transition-all duration-200 hover:opacity-80 px-1 py-0.5 rounded-sm border-b-2 ${highlightClasses}`}
-                      onClick={() => onBookmarkClick(bookmark)}
-                    >
-                      {bookmarkText}
-                    </span>
-                  </BookmarkTooltip>
-                );
-              }
-
-              currentPos = Math.max(currentPos, endPos);
-            });
-
-            // Add remaining text in paragraph
-            if (currentPos < paragraph.length) {
-              elements.push(
-                <span key={`text-end`}>
-                  {paragraph.slice(currentPos)}
-                </span>
-              );
-            }
-
-            return (
-              <p
-                key={pIndex}
-                className="mb-6 last:mb-0 transition-colors duration-200"
-                id={`paragraph-${pIndex}`}
-              >
-                {elements}
-              </p>
-            );
-          })}
+          {paragraphs.map((paragraph, pIndex) => (
+            <p
+              key={pIndex}
+              className="mb-6 last:mb-0 transition-colors duration-200"
+              id={`paragraph-${pIndex}`}
+            >
+              {paragraph}
+            </p>
+          ))}
         </div>
       );
-    }, [textContent, bookmarks, onBookmarkClick, ref]);
+    };
 
     if (loadingText) {
       return (
@@ -241,7 +115,7 @@ export const TextContent = forwardRef<HTMLDivElement, TextContentProps>(
         onTouchEnd={onTextSelection}
         onContextMenu={onContextMenu}
       >
-        {renderTextContentWithBookmarksAndRef()}
+        {renderTextContent()}
       </div>
     );
   }
