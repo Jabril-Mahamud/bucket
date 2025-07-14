@@ -76,10 +76,7 @@ export function LibraryPage() {
 
       const formattedFiles: LibraryFile[] = typedFilesData.map(file => ({
         ...file,
-        progress: file.file_progress?.[0] ? {
-          progress_percentage: file.file_progress[0].progress_percentage || 0,
-          last_position: file.file_progress[0].last_position || '0'
-        } : null
+        progress: file.file_progress?.[0] || null
       }));
 
       setFiles(formattedFiles);
@@ -101,8 +98,7 @@ export function LibraryPage() {
     // Apply search filter
     if (searchQuery.trim()) {
       filtered = filtered.filter(file =>
-        file.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (file.text_content && file.text_content.toLowerCase().includes(searchQuery.toLowerCase()))
+        file.filename.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -424,7 +420,7 @@ export function LibraryPage() {
               
               <CardContent className="space-y-4 text-sm">
                 {/* Progress Bar */}
-                {file.progress && file.progress.progress_percentage > 0 && (
+                {file.progress && file.progress.progress_percentage !== null && file.progress.progress_percentage > 0 && (
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-medium text-muted-foreground">
                       <span>Progress</span>
@@ -502,7 +498,7 @@ export function LibraryPage() {
                         <span>{formatFileSize(file.file_size)}</span>
                         <span className="hidden sm:inline text-muted-foreground/50">•</span>
                         <span>{formatDate(file.uploaded_at)}</span>
-                        {file.progress && file.progress.progress_percentage > 0 && (
+                        {file.progress && file.progress.progress_percentage !== null && file.progress.progress_percentage > 0 && (
                           <>
                             <span className="hidden sm:inline text-muted-foreground/50">•</span>
                             <span className="text-primary font-medium flex items-center gap-1.5">

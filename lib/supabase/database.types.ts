@@ -274,6 +274,63 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_usage: {
+        Row: {
+          created_at: string | null
+          id: string
+          month_year: string
+          storage_bytes_used: number | null
+          tts_characters_used: number | null
+          updated_at: string | null
+          uploads_count: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          month_year: string
+          storage_bytes_used?: number | null
+          tts_characters_used?: number | null
+          updated_at?: string | null
+          uploads_count?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          month_year?: string
+          storage_bytes_used?: number | null
+          tts_characters_used?: number | null
+          updated_at?: string | null
+          uploads_count?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      plan_limits: {
+        Row: {
+          features: Json | null
+          monthly_tts_characters: number
+          monthly_uploads: number
+          plan_name: string
+          storage_gb: number
+        }
+        Insert: {
+          features?: Json | null
+          monthly_tts_characters: number
+          monthly_uploads: number
+          plan_name: string
+          storage_gb: number
+        }
+        Update: {
+          features?: Json | null
+          monthly_tts_characters?: number
+          monthly_uploads?: number
+          plan_name?: string
+          storage_gb?: number
+        }
+        Relationships: []
+      }
       reading_sessions: {
         Row: {
           duration_minutes: number | null
@@ -324,6 +381,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean | null
+          created_at: string | null
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          plan_name: string
+          status: string
+          stripe_customer_id: string
+          stripe_price_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_name: string
+          status: string
+          stripe_customer_id: string
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_name?: string
+          status?: string
+          stripe_customer_id?: string
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       tags: {
         Row: {
@@ -480,6 +582,27 @@ export type Database = {
           current_month: string
         }[]
       }
+      get_user_usage_with_limits: {
+        Args: { target_user_id: string }
+        Returns: {
+          current_uploads: number
+          current_tts_characters: number
+          current_storage_gb: number
+          limit_uploads: number
+          limit_tts_characters: number
+          limit_storage_gb: number
+          plan_name: string
+          subscription_status: string
+        }[]
+      }
+      increment_tts_usage: {
+        Args: { target_user_id: string; character_count: number }
+        Returns: undefined
+      }
+      increment_upload_usage: {
+        Args: { target_user_id: string; file_size_bytes?: number }
+        Returns: undefined
+      }
       search_files: {
         Args: {
           search_user_id: string
@@ -501,6 +624,10 @@ export type Database = {
           progress_percentage: number
           search_rank: number
         }[]
+      }
+      update_storage_usage: {
+        Args: { target_user_id: string; size_delta: number }
+        Returns: undefined
       }
     }
     Enums: {

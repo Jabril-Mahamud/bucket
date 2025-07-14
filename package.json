@@ -17,6 +17,7 @@
     "@radix-ui/react-select": "^2.2.5",
     "@radix-ui/react-slot": "^1.2.2",
     "@radix-ui/react-tooltip": "^1.2.7",
+    "@stripe/stripe-js": "^7.4.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.50.4",
     "class-variance-authority": "^0.7.1",
@@ -29,6 +30,7 @@
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.3.8",
     "sonner": "^2.0.5",
+    "stripe": "^18.3.0",
     "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {
@@ -36,6 +38,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/stripe": "^8.0.416",
     "autoprefixer": "^10.4.20",
     "eslint": "^9",
     "eslint-config-next": "15.3.1",

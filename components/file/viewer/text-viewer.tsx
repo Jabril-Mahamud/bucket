@@ -69,7 +69,7 @@ export function TextViewer({
   };
 
   const handleConvertToAudio = async () => {
-    let textToConvert = fileData.text_content;
+    let textToConvert: string | null = null;
 
     if (!textToConvert && fileData.file_type === "text/plain") {
       try {
@@ -189,7 +189,7 @@ export function TextViewer({
                 <div>
                   <TextContent
                     fileId={fileId}
-                    fileData={fileData}
+                    
                     onTextSelection={handleTextSelection}
                     onContextMenu={() => {}}
                     ref={handleTextContentRef}

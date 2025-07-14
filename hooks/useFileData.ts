@@ -54,12 +54,7 @@ export function useFileData(fileId: string) {
 
       const formattedFile: FileWithProgressData = {
         ...fileWithProgress,
-        progress: fileWithProgress.file_progress?.[0]
-          ? {
-              progress_percentage: fileWithProgress.file_progress[0].progress_percentage || 0,
-              last_position: fileWithProgress.file_progress[0].last_position || "0",
-            }
-          : null,
+        progress: fileWithProgress.file_progress?.[0] || null,
       };
 
       setFileData(formattedFile);

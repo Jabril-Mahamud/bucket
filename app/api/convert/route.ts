@@ -1,8 +1,9 @@
-// app/api/convert/route.ts
+// app/api/convert/route.ts (updated with usage enforcement)
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { CloudConvertService } from "@/lib/cloudconvert";
 import { TablesInsert } from "@/lib/supabase/database.types";
+import { checkUsageLimit } from "@/lib/stripe/usage-enforcement";
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,6 +21,34 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    }
+
+    // Check usage limits BEFORE processing
+    const uploadCheck = await checkUsageLimit(user.id, 'upload', 1);
+    if (!uploadCheck.allowed) {
+      return NextResponse.json({ 
+        error: uploadCheck.error,
+        usageInfo: {
+          currentUsage: uploadCheck.currentUsage,
+          limits: uploadCheck.limits,
+          planName: uploadCheck.planName,
+          remaining: uploadCheck.remaining
+        }
+      }, { status: 429 });
+    }
+
+    // Check storage limit for the converted file (estimate similar size)
+    const storageCheck = await checkUsageLimit(user.id, 'storage', file.size);
+    if (!storageCheck.allowed) {
+      return NextResponse.json({ 
+        error: storageCheck.error,
+        usageInfo: {
+          currentUsage: storageCheck.currentUsage,
+          limits: storageCheck.limits,
+          planName: storageCheck.planName,
+          remaining: storageCheck.remaining
+        }
+      }, { status: 429 });
     }
 
     // Check if file type is supported
@@ -64,7 +93,7 @@ export async function POST(request: NextRequest) {
     // Save file metadata to database with corrected filename
     const fileInsert: TablesInsert<"files"> = {
       user_id: user.id,
-      filename: textFileName, // ✅ Fixed: Use converted filename instead of original
+      filename: textFileName,
       file_path: storageData.path,
       file_type: 'text/plain',
       file_size: new Blob([conversionResult.text]).size,
@@ -87,11 +116,20 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
+    // Usage is automatically incremented by database trigger
+
     return NextResponse.json({
       success: true,
       file: fileData,
       textLength: conversionResult.text.length,
-      message: 'File converted to text successfully'
+      message: 'File converted to text successfully',
+      usageInfo: {
+        remaining: {
+          uploads: (uploadCheck.remaining || 0) - 1,
+          storageGB: (storageCheck.remaining || 0) - (new Blob([conversionResult.text]).size / (1024 * 1024 * 1024))
+        },
+        planName: uploadCheck.planName || 'free'
+      }
     });
 
   } catch (error) {

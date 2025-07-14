@@ -4,11 +4,10 @@
 import { useState, useEffect, forwardRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, FileText } from "lucide-react";
-import { FileWithProgressData } from "@/lib/types";
+
 
 interface TextContentProps {
   fileId: string;
-  fileData: FileWithProgressData;
   onTextSelection: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }
@@ -16,7 +15,6 @@ interface TextContentProps {
 export const TextContent = forwardRef<HTMLDivElement, TextContentProps>(
   function TextContent({
     fileId,
-    fileData,
     onTextSelection,
     onContextMenu,
   }, ref) {
@@ -28,13 +26,6 @@ export const TextContent = forwardRef<HTMLDivElement, TextContentProps>(
       const fetchTextContent = async () => {
         try {
           setLoadingText(true);
-          
-          // First try to get text from fileData
-          if (fileData.text_content) {
-            setTextContent(fileData.text_content);
-            setLoadingText(false);
-            return;
-          }
 
           // If not available, fetch from API
           const response = await fetch(`/api/files/${fileId}`);
@@ -52,7 +43,7 @@ export const TextContent = forwardRef<HTMLDivElement, TextContentProps>(
       };
 
       fetchTextContent();
-    }, [fileId, fileData.text_content]);
+    }, [fileId]);
 
     const renderTextContent = () => {
       if (!textContent)

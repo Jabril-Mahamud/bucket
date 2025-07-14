@@ -1,8 +1,9 @@
-// app/api/tts/route.ts
+// app/api/tts/route.ts (updated with usage enforcement)
 import { createClient } from "@/lib/supabase/server";
 import { PollyService } from "@/lib/polly";
 import { NextRequest, NextResponse } from "next/server";
 import { TablesInsert } from "@/lib/supabase/database.types";
+import { checkUsageLimit } from "@/lib/stripe/usage-enforcement";
 
 interface TTSRequestBody {
   text: string;
@@ -28,19 +29,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
     }
 
-    // Check current month usage (optional: implement usage limits)
-    const { data: currentUsage } = await supabase
-      .rpc('get_current_month_tts_usage', { target_user_id: user.id });
+    const characterCount = text.trim().length;
 
-    const monthlyUsage = currentUsage?.[0];
-    
-    // Optional: Implement usage limits (e.g., 100,000 characters per month for free tier)
-    const MONTHLY_LIMIT = 100000; // 100k characters
-    if (monthlyUsage && monthlyUsage.total_characters >= MONTHLY_LIMIT) {
+    // Check TTS usage limit BEFORE processing
+    const usageCheck = await checkUsageLimit(user.id, 'tts', characterCount);
+    if (!usageCheck.allowed) {
       return NextResponse.json({ 
-        error: 'Monthly TTS usage limit exceeded',
-        currentUsage: monthlyUsage.total_characters,
-        limit: MONTHLY_LIMIT
+        error: usageCheck.error,
+        currentUsage: usageCheck.currentUsage,
+        limits: usageCheck.limits,
+        planName: usageCheck.planName,
+        remaining: usageCheck.remaining
       }, { status: 429 });
     }
 
@@ -132,7 +131,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Track usage in database
+    // Track usage in database (this also increments monthly usage automatically)
     const { error: usageError } = await supabase
       .from('tts_usage')
       .insert({
@@ -150,7 +149,7 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if usage tracking fails
     }
 
-    // Return success with file info
+    // Return success with file info and updated usage info
     return NextResponse.json({
       success: true,
       message: 'Audio conversion completed and saved to library',
@@ -161,6 +160,12 @@ export async function POST(request: NextRequest) {
       },
       characterCount: ttsResult.characterCount,
       costCents: ttsResult.costCents,
+      usageInfo: {
+        remaining: {
+          ttsCharacters: (usageCheck.remaining || 0) - characterCount,
+        },
+        planName: usageCheck.planName || 'free'
+      }
     });
 
   } catch (error) {
