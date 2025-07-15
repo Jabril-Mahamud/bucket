@@ -24,19 +24,35 @@ import { UsageWarning } from "../billing/pricing/usage/usage-warning";
 
 interface EnhancedFileUploadProps {
   onUploadComplete: () => void;
-  maxFiles?: number;
   className?: string;
+}
+
+interface UsageInfo {
+  currentUsage?: {
+    uploads: number;
+    ttsCharacters: number;
+    storageGB: number;
+  };
+  limits?: {
+    uploads: number;
+    ttsCharacters: number;
+    storageGB: number;
+  };
+  planName?: string;
+  remaining?: {
+    uploads?: number;
+    storageGB?: number;
+  };
 }
 
 interface UploadError {
   type: 'UPLOAD_LIMIT_EXCEEDED' | 'STORAGE_LIMIT_EXCEEDED' | 'UPLOAD_FAILED' | 'INTERNAL_ERROR';
   message: string;
-  usageInfo?: any;
+  usageInfo?: UsageInfo;
 }
 
 export function EnhancedFileUpload({ 
   onUploadComplete, 
-  maxFiles = 5,
   className 
 }: EnhancedFileUploadProps) {
   const [uploading, setUploading] = useState(false);
@@ -167,14 +183,19 @@ export function EnhancedFileUpload({
       await refreshUsage();
       onUploadComplete();
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error processing file:", error);
-      if (error.type) {
-        handleUploadError(error);
+      if (typeof error === "object" && error !== null && "type" in error) {
+        handleUploadError(error as UploadError);
+      } else if (typeof error === "object" && error !== null && "message" in error) {
+        handleUploadError({
+          type: 'UPLOAD_FAILED',
+          message: (error as { message?: string }).message || "Unknown error occurred"
+        });
       } else {
         handleUploadError({
           type: 'UPLOAD_FAILED',
-          message: error.message || "Unknown error occurred"
+          message: "Unknown error occurred"
         });
       }
     } finally {

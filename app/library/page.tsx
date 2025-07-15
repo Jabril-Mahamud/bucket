@@ -1,5 +1,5 @@
-import { LibraryPage } from "@/components/file/library-page";
+import { UpdatedLibraryPage } from "@/components/file/library-page";
 
 export default function Page() {
-  return <LibraryPage />;
+  return <UpdatedLibraryPage />;
 }

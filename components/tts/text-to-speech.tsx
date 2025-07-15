@@ -153,17 +153,6 @@ export function EnhancedTextToSpeech({
     return (cents / 100).toFixed(4);
   };
 
-  const getTTSUsageProgress = () => {
-    if (!currentUsage) return 0;
-    const limit = 100000; // 100k characters monthly limit for display
-    return Math.min((currentUsage.total_characters / limit) * 100, 100);
-  };
-
-  const getRemainingCharacters = () => {
-    if (!usage) return 0;
-    return Math.max(0, usage.limits.ttsCharacters - usage.current.ttsCharacters);
-  };
-
   const canConvert = () => {
     const targetText = selectedText || text;
     return targetText.trim().length > 0 && targetText.length <= 3000;
