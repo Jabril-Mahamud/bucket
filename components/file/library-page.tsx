@@ -1,4 +1,4 @@
-// components/file/library-page.tsx
+// components/file/updated-library-page.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -28,17 +28,20 @@ import {
   SortAsc,
   Grid3X3,
   List,
-  Plus
+  Plus,
+  BarChart3
 } from "lucide-react";
-import { FileUpload } from "./file-upload";
 import Link from "next/link";
 import { LibraryFile, FileProgressData, DatabaseFile } from "@/lib/types";
+import { useUsage } from "@/lib/stripe/contexts/usage-context";
+import { UsageDashboard } from "../billing/pricing/usage/usage-dashboard";
+import { EnhancedFileUpload } from "./file-upload";
 
 type SortOption = 'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'size-asc' | 'size-desc';
 type FilterOption = 'all' | 'pdf' | 'text' | 'audio';
 type ViewMode = 'grid' | 'list';
 
-export function LibraryPage() {
+export function UpdatedLibraryPage() {
   const [files, setFiles] = useState<LibraryFile[]>([]);
   const [filteredFiles, setFilteredFiles] = useState<LibraryFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,8 +50,10 @@ export function LibraryPage() {
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [showUpload, setShowUpload] = useState(false);
+  const [showUsage, setShowUsage] = useState(false);
   
   const supabase = createClient();
+  const { usage, refreshUsage } = useUsage();
 
   const fetchFiles = useCallback(async () => {
     try {
@@ -141,6 +146,12 @@ export function LibraryPage() {
     setFilteredFiles(filtered);
   }, [files, searchQuery, sortBy, filterBy]);
 
+  const handleUploadComplete = useCallback(async () => {
+    await fetchFiles();
+    await refreshUsage();
+    setShowUpload(false);
+  }, [fetchFiles, refreshUsage]);
+
   const getFileIcon = (fileType: string) => {
     if (fileType.startsWith('audio/')) 
       return <Headphones className="h-8 w-8 text-emerald-500" />;
@@ -202,8 +213,9 @@ export function LibraryPage() {
 
       if (dbError) throw dbError;
 
-      // Refresh the list
-      fetchFiles();
+      // Refresh the list and usage
+      await fetchFiles();
+      await refreshUsage();
     } catch (error) {
       console.error('Error deleting file:', error);
       alert('Failed to delete file');
@@ -247,13 +259,6 @@ export function LibraryPage() {
     return <Eye className="h-3 w-3" />;
   };
 
-  // Helper function to check if file has valid progress
-  const hasValidProgress = (file: LibraryFile) => {
-    return file.progress && 
-           file.progress.progress_percentage !== null && 
-           file.progress.progress_percentage > 0;
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh] sm:min-h-[60vh]">
@@ -272,29 +277,60 @@ export function LibraryPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">My Library</h1>
-            <p className="text-sm sm:text-base lg:text-lg text-muted-foreground">
-              {files.length === 0 ? 'No files yet' : `${files.length} ${files.length === 1 ? 'file' : 'files'} in your collection`}
-            </p>
+            <div className="flex items-center gap-4 text-sm sm:text-base lg:text-lg text-muted-foreground">
+              <span>
+                {files.length === 0 ? 'No files yet' : `${files.length} ${files.length === 1 ? 'file' : 'files'} in your collection`}
+              </span>
+              {usage && (
+                <Badge variant="outline" className="gap-1">
+                  <BarChart3 className="h-3 w-3" />
+                  {usage.planName}
+                </Badge>
+              )}
+            </div>
           </div>
-          <Button 
-            onClick={() => setShowUpload(!showUpload)}
-            size="lg"
-            className="gap-2 w-full sm:w-auto"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="sm:hidden">Upload</span>
-            <span className="hidden sm:inline">Upload Files</span>
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline"
+              onClick={() => setShowUsage(!showUsage)}
+              size="lg"
+              className="gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Usage</span>
+            </Button>
+            <Button 
+              onClick={() => setShowUpload(!showUpload)}
+              size="lg"
+              className="gap-2 w-full sm:w-auto"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="sm:hidden">Upload</span>
+              <span className="hidden sm:inline">Upload Files</span>
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Usage Dashboard */}
+      {showUsage && (
+        <Card className="border-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Usage Dashboard
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <UsageDashboard />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Upload Section */}
       {showUpload && (
         <div className="border-2 border-dashed border-primary/20 rounded-lg p-4 sm:p-6 bg-primary/5">
-          <FileUpload onUploadComplete={() => {
-            fetchFiles();
-            setShowUpload(false);
-          }} />
+          <EnhancedFileUpload onUploadComplete={handleUploadComplete} />
         </div>
       )}
 
@@ -427,16 +463,16 @@ export function LibraryPage() {
               
               <CardContent className="space-y-4 text-sm">
                 {/* Progress Bar */}
-                {hasValidProgress(file) && (
+                {file.progress && file.progress.progress_percentage !== null && file.progress.progress_percentage > 0 && (
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-medium text-muted-foreground">
                       <span>Progress</span>
-                      <span>{Math.round(file.progress!.progress_percentage!)}%</span>
+                      <span>{Math.round(file.progress.progress_percentage)}%</span>
                     </div>
                     <div className="w-full bg-secondary rounded-full h-1.5">
                       <div 
                         className="bg-primary h-1.5 rounded-full transition-all"
-                        style={{ width: `${file.progress!.progress_percentage!}%` }}
+                        style={{ width: `${file.progress.progress_percentage}%` }}
                       />
                     </div>
                   </div>
@@ -505,12 +541,12 @@ export function LibraryPage() {
                         <span>{formatFileSize(file.file_size)}</span>
                         <span className="hidden sm:inline text-muted-foreground/50">•</span>
                         <span>{formatDate(file.uploaded_at)}</span>
-                        {hasValidProgress(file) && (
+                        {file.progress && file.progress.progress_percentage !== null && file.progress.progress_percentage > 0 && (
                           <>
                             <span className="hidden sm:inline text-muted-foreground/50">•</span>
                             <span className="text-primary font-medium flex items-center gap-1.5">
                               <div className="w-2 h-2 rounded-full bg-primary"/>
-                              {Math.round(file.progress!.progress_percentage!)}% complete
+                              {Math.round(file.progress.progress_percentage)}% complete
                             </span>
                           </>
                         )}

@@ -1,9 +1,11 @@
+// app/layout.tsx - Updated with Usage Context
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Header } from "@/components/header";
 import "./globals.css";
 import { Toaster } from "sonner";
+import { UsageProvider } from "@/lib/stripe/contexts/usage-context";
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -35,13 +37,15 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="min-h-screen flex flex-col">
-            <Header />
-            <main className="flex-1">
-              {children}
-            </main>
-            <Toaster />
-          </div>
+          <UsageProvider>
+            <div className="min-h-screen flex flex-col">
+              <Header />
+              <main className="flex-1">
+                {children}
+              </main>
+              <Toaster />
+            </div>
+          </UsageProvider>
         </ThemeProvider>
       </body>
     </html>
