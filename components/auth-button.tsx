@@ -2,7 +2,13 @@ import Link from "next/link";
 import { Button } from "./ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "./logout-button";
-import { Settings, ChevronDown, CreditCard, Crown, TrendingUp } from "lucide-react";
+import {
+  Settings,
+  ChevronDown,
+  CreditCard,
+  Crown,
+  TrendingUp,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 function getUserInitials(email: string): string {
-  const parts = email.split('@')[0].split('.');
+  const parts = email.split("@")[0].split(".");
   if (parts.length >= 2) {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   }
@@ -28,25 +34,25 @@ export async function AuthButton() {
   } = await supabase.auth.getUser();
 
   if (user) {
-    const userInitials = getUserInitials(user.email || '');
-    const userName = user.email?.split('@')[0] || 'User';
+    const userInitials = getUserInitials(user.email || "");
+    const userName = user.email?.split("@")[0] || "User";
 
     // Get subscription info for the dropdown
     const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('plan_name, status')
-      .eq('user_id', user.id)
+      .from("subscriptions")
+      .select("plan_name, status")
+      .eq("user_id", user.id)
       .single();
 
-    const planName = subscription?.plan_name || 'free';
-    const isActive = subscription?.status === 'active';
+    const planName = subscription?.plan_name || "free";
+    const isActive = subscription?.status === "active";
 
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             className="h-8 gap-2 px-2 data-[state=open]:bg-accent"
           >
             <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium">
@@ -69,7 +75,7 @@ export async function AuthButton() {
                 <span className="text-xs text-muted-foreground capitalize">
                   {planName} Plan
                 </span>
-                {planName !== 'free' && isActive && (
+                {planName !== "free" && isActive && (
                   <Crown className="h-3 w-3 text-amber-500" />
                 )}
               </div>
@@ -79,6 +85,13 @@ export async function AuthButton() {
 
           <DropdownMenuItem asChild>
             <Link href="/protected">
+              <Settings className="mr-2 h-4 w-4" />
+              User Account page
+            </Link>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem asChild>
+            <Link href="/settings">
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </Link>
@@ -91,7 +104,7 @@ export async function AuthButton() {
             </Link>
           </DropdownMenuItem>
 
-          {planName === 'free' && (
+          {planName === "free" && (
             <DropdownMenuItem asChild>
               <Link href="/pricing">
                 <TrendingUp className="mr-2 h-4 w-4" />
@@ -99,7 +112,7 @@ export async function AuthButton() {
               </Link>
             </DropdownMenuItem>
           )}
-          
+
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
             <LogoutButton />
