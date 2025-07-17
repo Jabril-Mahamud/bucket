@@ -44,12 +44,7 @@ export async function Header() {
           </nav>
         </div>
 
-        {/* Center - Usage Indicator for authenticated users */}
-        {user && (
-          <div className="hidden lg:flex flex-1 justify-center max-w-md">
-            <UsageIndicator compact className="w-full" />
-          </div>
-        )}
+        
 
         <div className="flex items-center gap-1">
           {/* Mobile Navigation Links */}

@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UsageIndicator } from "./billing/usage-indicator";
 
 function getUserInitials(email: string): string {
   const parts = email.split("@")[0].split(".");
@@ -82,7 +83,13 @@ export async function AuthButton() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-
+          {/* Center - Usage Indicator for authenticated users */}
+          {user && (
+            <div className="hidden lg:flex flex-1 justify-center max-w-md">
+              <UsageIndicator compact className="w-full" />
+            </div>
+          )}
+          <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
             <Link href="/protected">
               <Settings className="mr-2 h-4 w-4" />
