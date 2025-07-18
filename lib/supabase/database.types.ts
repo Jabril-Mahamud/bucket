@@ -570,6 +570,10 @@ export type Database = {
       }
     }
     Functions: {
+      check_user_exists: {
+        Args: { target_user_id: string }
+        Returns: boolean
+      }
       extract_metadata_from_filename: {
         Args: { filename: string }
         Returns: Json
