@@ -1,4 +1,4 @@
-// lib/contexts/usage-context.tsx
+// lib/stripe/contexts/usage-context.tsx
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
@@ -58,19 +58,43 @@ export function UsageProvider({ children }: UsageProviderProps) {
       
       if (!user) {
         setUsage(null);
+        setLoading(false);
         return;
       }
 
-      const response = await fetch('/api/subscription/status');
+      // Add cache busting parameter to ensure fresh data
+      const timestamp = Date.now();
+      const response = await fetch(`/api/subscription/status?t=${timestamp}`, {
+        method: 'GET',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch usage data');
+        throw new Error(`HTTP ${response.status}: Failed to fetch usage data`);
       }
 
       const data = await response.json();
+      
+      // Validate the response structure
+      if (!data.usage) {
+        throw new Error('Invalid response format: missing usage data');
+      }
+
       setUsage(data.usage);
     } catch (err) {
       console.error('Error fetching usage:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch usage data');
+      
+      // Set default usage for free plan if fetch fails
+      setUsage({
+        current: { uploads: 0, ttsCharacters: 0, storageGB: 0 },
+        limits: { uploads: 5, ttsCharacters: 25000, storageGB: 1 },
+        planName: 'free',
+        subscriptionStatus: 'active'
+      });
     } finally {
       setLoading(false);
     }
@@ -204,19 +228,49 @@ export function UsageProvider({ children }: UsageProviderProps) {
     fetchUsage();
   }, [fetchUsage]);
 
-  // Listen for auth state changes
+  // Listen for auth state changes with better cleanup
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        fetchUsage();
+        // Small delay to ensure user data is available
+        setTimeout(() => {
+          fetchUsage();
+        }, 500);
       } else if (event === 'SIGNED_OUT') {
         setUsage(null);
         setLoading(false);
+        setError(null);
       }
     });
 
     return () => subscription.unsubscribe();
   }, [supabase, fetchUsage]);
+
+  // Auto-refresh usage data every 30 seconds when component is active
+  useEffect(() => {
+    if (!usage) return;
+
+    const interval = setInterval(() => {
+      // Only refresh if the tab is visible to avoid unnecessary API calls
+      if (document.visibilityState === 'visible') {
+        fetchUsage();
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [usage, fetchUsage]);
+
+  // Listen for window focus to refresh usage data
+  useEffect(() => {
+    const handleFocus = () => {
+      if (usage) {
+        fetchUsage();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [usage, fetchUsage]);
 
   const contextValue: UsageContextType = {
     usage,

@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
   BarChart3, 
-  DollarSign, 
   Calendar, 
   TrendingUp, 
   Volume2,
@@ -17,7 +16,6 @@ import {
 
 interface TTSUsageData {
   total_characters: number;
-  total_cost_cents: number;
   current_month: string;
 }
 
@@ -25,7 +23,6 @@ interface RecentUsage {
   id: string;
   text_snippet: string;
   character_count: number;
-  cost_cents: number | null;
   voice_id: string;
   created_at: string | null;
 }
@@ -45,19 +42,22 @@ export function TTSUsageDashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch current month usage
+      // Fetch current month usage (without cost information)
       const { data: usageData } = await supabase.rpc('get_current_month_tts_usage', {
         target_user_id: user.id
       });
 
       if (usageData && usageData.length > 0) {
-        setCurrentUsage(usageData[0]);
+        setCurrentUsage({
+          total_characters: usageData[0].total_characters,
+          current_month: usageData[0].current_month
+        });
       }
 
-      // Fetch recent usage
+      // Fetch recent usage (without cost information)
       const { data: recentData } = await supabase
         .from('tts_usage')
-        .select('*')
+        .select('id, text_snippet, character_count, voice_id, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -76,10 +76,6 @@ export function TTSUsageDashboard() {
   useEffect(() => {
     fetchUsageData();
   }, [fetchUsageData]);
-
-  const formatCost = (cents: number) => {
-    return (cents / 100).toFixed(4);
-  };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'Unknown date';
@@ -120,8 +116,8 @@ export function TTSUsageDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Overview Cards - Removed Cost Card */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Current Month Usage */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -141,22 +137,6 @@ export function TTSUsageDashboard() {
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               {getRemainingCharacters().toLocaleString()} characters remaining
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Monthly Cost */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Cost</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ${formatCost(currentUsage?.total_cost_cents || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Rate: $0.004 per 1,000 characters
             </p>
           </CardContent>
         </Card>
@@ -212,7 +192,7 @@ export function TTSUsageDashboard() {
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <Badge variant="outline" className="text-xs">
-                      ${formatCost(usage.cost_cents || 0)}
+                      Audio Created
                     </Badge>
                   </div>
                 </div>
@@ -242,6 +222,7 @@ export function TTSUsageDashboard() {
             <p>• Use punctuation and shorter sentences for better speech quality</p>
             <p>• Different voices may sound better for different types of content</p>
             <p>• Your monthly allowance resets on the 1st of each month</p>
+            <p>• Audio files are automatically saved to your library for offline listening</p>
           </div>
         </CardContent>
       </Card>

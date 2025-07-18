@@ -1,4 +1,4 @@
-// components/tts/enhanced-text-to-speech.tsx
+// components/tts/text-to-speech.tsx
 "use client";
 
 import { useState, useCallback } from "react";
@@ -22,7 +22,6 @@ import {
   Pause,
   Square,
   Loader2,
-  DollarSign,
   BarChart3,
   AlertTriangle,
   Zap,
@@ -109,10 +108,9 @@ export function EnhancedTextToSpeech({
           autoPlay: true,
         });
 
+        // Show success without cost information
         toast.success(
-          `Converted ${result.characterCount} characters (${(
-            result.costCents / 100
-          ).toFixed(4)}¢)`
+          `Converted ${result.characterCount} characters successfully!`
         );
 
         // Refresh usage data after successful conversion
@@ -148,10 +146,6 @@ export function EnhancedTextToSpeech({
       setSelectedText(selection.toString().trim());
     }
   }, []);
-
-  const formatCost = (cents: number) => {
-    return (cents / 100).toFixed(4);
-  };
 
   const canConvert = () => {
     const targetText = selectedText || text;
@@ -302,7 +296,7 @@ export function EnhancedTextToSpeech({
           </div>
         </UsageGate>
 
-        {/* Usage Statistics */}
+        {/* Usage Statistics - No Cost Display */}
         {(currentUsage || usage) && (
           <div className="space-y-3 pt-3 border-t">
             <div className="flex items-center gap-2">
@@ -328,20 +322,8 @@ export function EnhancedTextToSpeech({
               </div>
             )}
 
-            {currentUsage && (
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-1">
-                  <DollarSign className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-muted-foreground">Total Cost</span>
-                </div>
-                <span className="font-medium">
-                  ${formatCost(currentUsage.total_cost_cents)}
-                </span>
-              </div>
-            )}
-
             <p className="text-xs text-muted-foreground">
-              Usage resets monthly. Standard rate: $0.004 per 1,000 characters.
+              Usage resets monthly. Convert your documents to audio for easier consumption.
             </p>
 
             {/* Upgrade prompt for free users approaching limit */}
