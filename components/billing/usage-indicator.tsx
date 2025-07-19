@@ -20,21 +20,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { UsageData } from "@/lib/stripe/types";
 
-interface UsageData {
-  current: {
-    uploads: number;
-    ttsCharacters: number;
-    storageGB: number;
-  };
-  limits: {
-    uploads: number;
-    ttsCharacters: number;
-    storageGB: number;
-  };
-  planName: string;
-  subscriptionStatus: string;
-}
 
 interface UsageIndicatorProps {
   compact?: boolean;
@@ -126,10 +113,10 @@ export function UsageIndicator({ compact = false, className = "" }: UsageIndicat
 
   const usageItems = [
     {
-      label: 'Uploads',
+      label: 'Files',
       icon: Upload,
-      current: usage.current.uploads,
-      limit: usage.limits.uploads,
+      current: usage.current.totalFiles,
+      limit: usage.limits.maxFiles,
       unit: '',
       color: 'text-blue-600 dark:text-blue-400',
       bgColor: 'bg-blue-100 dark:bg-blue-900/30'
@@ -321,7 +308,7 @@ export function UsageIndicator({ compact = false, className = "" }: UsageIndicat
         </div>
 
         {/* Upgrade Prompt */}
-        {(usage.current.uploads / usage.limits.uploads > 0.7 || 
+        {(usage.current.totalFiles / usage.limits.maxFiles > 0.7 || 
           usage.current.ttsCharacters / usage.limits.ttsCharacters > 0.7 || 
           usage.current.storageGB / usage.limits.storageGB > 0.7) && 
           usage.planName === 'free' && (

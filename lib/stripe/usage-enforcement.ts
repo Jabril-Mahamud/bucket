@@ -1,33 +1,34 @@
 // lib/stripe/usage-enforcement.ts
 import { createClient } from '@/lib/supabase/server';
+import { PlanType } from './types';
 
 export interface UsageCheckResult {
   allowed: boolean;
   remaining?: number;
   error?: string;
   currentUsage?: {
-    uploads: number;
+    totalFiles: number;
     ttsCharacters: number;
     storageGB: number;
   };
   limits?: {
-    uploads: number;
+    maxFiles: number;
     ttsCharacters: number;
     storageGB: number;
   };
-  planName?: string;
+  planName?: PlanType;
 }
 
 // Default limits for free plan
 const DEFAULT_FREE_LIMITS = {
-  uploads: 5,
+  maxFiles: 20,
   ttsCharacters: 25000,
   storageGB: 1
 };
 
 export async function checkUsageLimit(
   userId: string,
-  usageType: 'upload' | 'tts' | 'storage',
+  usageType: 'files' | 'tts' | 'storage',
   amount: number = 1
 ): Promise<UsageCheckResult> {
   try {
@@ -64,13 +65,13 @@ export async function checkUsageLimit(
           }
 
           const currentUsage = {
-            uploads: usage.current_uploads || 0,
+            totalFiles: usage.current_files || 0,
             ttsCharacters: usage.current_tts_characters || 0,
             storageGB: usage.current_storage_gb || 0,
           };
 
           const limits = {
-            uploads: usage.limit_uploads ?? DEFAULT_FREE_LIMITS.uploads,
+            maxFiles: usage.limit_files ?? DEFAULT_FREE_LIMITS.maxFiles,
             ttsCharacters: usage.limit_tts_characters ?? DEFAULT_FREE_LIMITS.ttsCharacters,
             storageGB: usage.limit_storage_gb ?? DEFAULT_FREE_LIMITS.storageGB,
           };
@@ -103,34 +104,34 @@ export async function checkUsageLimit(
 }
 
 function checkAgainstLimits(
-  usageType: 'upload' | 'tts' | 'storage',
+  usageType: 'files' | 'tts' | 'storage',
   amount: number,
-  currentUsage: { uploads: number; ttsCharacters: number; storageGB: number },
-  limits: { uploads: number; ttsCharacters: number; storageGB: number },
+  currentUsage: { totalFiles: number; ttsCharacters: number; storageGB: number },
+  limits: { maxFiles: number; ttsCharacters: number; storageGB: number },
   planName: string
 ): UsageCheckResult {
   switch (usageType) {
-    case 'upload':
-      const remainingUploads = limits.uploads === -1 
+    case 'files':
+      const remainingFiles = limits.maxFiles === -1 
         ? Infinity 
-        : Math.max(0, limits.uploads - currentUsage.uploads);
+        : Math.max(0, limits.maxFiles - currentUsage.totalFiles);
       
-      if (remainingUploads < amount) {
+      if (remainingFiles < amount) {
         return { 
           allowed: false, 
-          remaining: remainingUploads,
-          error: 'Monthly upload limit exceeded',
+          remaining: remainingFiles,
+          error: 'File limit exceeded',
           currentUsage,
           limits,
-          planName
+          planName: planName as PlanType
         };
       }
       return { 
         allowed: true, 
-        remaining: remainingUploads,
+        remaining: remainingFiles,
         currentUsage,
         limits,
-        planName
+        planName: planName as PlanType
       };
 
     case 'tts':
@@ -143,7 +144,7 @@ function checkAgainstLimits(
           error: 'Monthly TTS character limit exceeded',
           currentUsage,
           limits,
-          planName
+          planName: planName as PlanType
         };
       }
       return { 
@@ -151,7 +152,7 @@ function checkAgainstLimits(
         remaining: remainingTts,
         currentUsage,
         limits,
-        planName
+        planName: planName as PlanType
       };
 
     case 'storage':
@@ -166,7 +167,7 @@ function checkAgainstLimits(
           error: 'Storage limit exceeded',
           currentUsage,
           limits,
-          planName
+          planName: planName as PlanType
         };
       }
       return { 
@@ -174,7 +175,7 @@ function checkAgainstLimits(
         remaining: remainingStorageGB,
         currentUsage,
         limits,
-        planName
+        planName: planName as PlanType
       };
 
     default:
@@ -183,18 +184,18 @@ function checkAgainstLimits(
         error: 'Invalid usage type',
         currentUsage,
         limits,
-        planName
+        planName: planName as PlanType
       };
   }
 }
 
 function getFallbackResponse(
-  usageType: 'upload' | 'tts' | 'storage', 
+  usageType: 'files' | 'tts' | 'storage', 
   amount: number,
   allowOperation: boolean
 ): UsageCheckResult {
   // When we can't check usage, we'll allow the operation but with free tier limits
-  const fallbackUsage = { uploads: 0, ttsCharacters: 0, storageGB: 0 };
+  const fallbackUsage = { totalFiles: 0, ttsCharacters: 0, storageGB: 0 };
   const fallbackLimits = DEFAULT_FREE_LIMITS;
   
   if (allowOperation) {
@@ -204,7 +205,7 @@ function getFallbackResponse(
       currentUsage: fallbackUsage,
       limits: fallbackLimits,
       planName: 'free',
-      remaining: usageType === 'upload' ? fallbackLimits.uploads :
+      remaining: usageType === 'files' ? fallbackLimits.maxFiles :
                  usageType === 'tts' ? fallbackLimits.ttsCharacters :
                  fallbackLimits.storageGB
     };
@@ -222,7 +223,7 @@ function getFallbackResponse(
 // Update usage after successful operation with better error handling
 export async function incrementUsage(
   userId: string,
-  usageType: 'upload' | 'tts',
+  usageType: 'files' | 'tts',
   amount: number,
   fileSizeBytes?: number
 ) {
@@ -230,7 +231,7 @@ export async function incrementUsage(
     const supabase = await createClient();
 
     switch (usageType) {
-      case 'upload':
+      case 'files':
         const { error: uploadError } = await supabase.rpc('increment_upload_usage', {
           target_user_id: userId,
           file_size_bytes: fileSizeBytes || 0
@@ -268,7 +269,7 @@ export async function getCurrentUsage(userId: string) {
     if (error || !data || data.length === 0) {
       // Return default free tier usage
       return {
-        current: { uploads: 0, ttsCharacters: 0, storageGB: 0 },
+        current: { totalFiles: 0, ttsCharacters: 0, storageGB: 0 },
         limits: DEFAULT_FREE_LIMITS,
         planName: 'free',
         subscriptionStatus: 'active',
@@ -279,12 +280,12 @@ export async function getCurrentUsage(userId: string) {
 
     return {
       current: {
-        uploads: usage.current_uploads || 0,
+        totalFiles: usage.current_files || 0,
         ttsCharacters: usage.current_tts_characters || 0,
         storageGB: usage.current_storage_gb || 0,
       },
       limits: {
-        uploads: usage.limit_uploads ?? DEFAULT_FREE_LIMITS.uploads,
+        maxFiles: usage.limit_files ?? DEFAULT_FREE_LIMITS.maxFiles,
         ttsCharacters: usage.limit_tts_characters ?? DEFAULT_FREE_LIMITS.ttsCharacters,
         storageGB: usage.limit_storage_gb ?? DEFAULT_FREE_LIMITS.storageGB,
       },
@@ -295,7 +296,7 @@ export async function getCurrentUsage(userId: string) {
     console.error('Error getting current usage:', error);
     // Return default free tier usage
     return {
-      current: { uploads: 0, ttsCharacters: 0, storageGB: 0 },
+      current: { totalFiles: 0, ttsCharacters: 0, storageGB: 0 },
       limits: DEFAULT_FREE_LIMITS,
       planName: 'free',
       subscriptionStatus: 'active',

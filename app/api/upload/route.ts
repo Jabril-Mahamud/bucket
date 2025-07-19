@@ -1,7 +1,7 @@
 // app/api/upload/route.ts
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { checkUsageLimit } from "@/lib/stripe/usage-enforcement";
+import { checkUsageLimit, incrementUsage } from "@/lib/stripe/usage-enforcement";
 import { TablesInsert } from "@/lib/supabase/database.types";
 
 export async function POST(request: NextRequest) {
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check usage limits BEFORE processing
-    const uploadCheck = await checkUsageLimit(user.id, 'upload', 1);
+    const uploadCheck = await checkUsageLimit(user.id, 'files', 1);
     if (!uploadCheck.allowed) {
       return NextResponse.json({ 
         error: uploadCheck.error,
@@ -88,7 +88,10 @@ export async function POST(request: NextRequest) {
       throw new Error(`Database error: ${dbError.message}`);
     }
 
-    // Usage is automatically incremented by database trigger
+    await incrementUsage(user.id, 'files', 1, file.size);
+
+      // Get updated usage info for response
+      const updatedUploadCheck = await checkUsageLimit(user.id, 'files', 0);
 
     return NextResponse.json({
       success: true,
@@ -96,8 +99,16 @@ export async function POST(request: NextRequest) {
       message: 'File uploaded successfully',
       usageInfo: {
         remaining: {
-          uploads: (uploadCheck.remaining || 0) - 1,
+          files: updatedUploadCheck.remaining || 0,
           storageGB: (storageCheck.remaining || 0) - (file.size / (1024 * 1024 * 1024))
+        },
+        current: {
+          totalFiles: updatedUploadCheck.currentUsage?.totalFiles || 0,
+          storageGB: storageCheck.currentUsage?.storageGB || 0
+        },
+        limits: {
+          maxFiles: updatedUploadCheck.limits?.maxFiles || 0,
+          storageGB: storageCheck.limits?.storageGB || 0
         },
         planName: uploadCheck.planName || 'free'
       }

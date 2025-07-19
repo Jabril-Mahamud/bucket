@@ -17,7 +17,7 @@ import Link from "next/link";
 import { useUsage } from "@/lib/stripe/contexts/usage-context";
 
 interface UsageWarningProps {
-  type: 'uploads' | 'tts' | 'storage';
+  type: 'files' | 'tts' | 'storage';
   className?: string;
 }
 
@@ -36,7 +36,7 @@ export function UsageWarning({ type, className }: UsageWarningProps) {
 
   const getIcon = () => {
     switch (type) {
-      case 'uploads': return <Upload className="h-4 w-4" />;
+      case 'files': return <Upload className="h-4 w-4" />;
       case 'tts': return <Volume2 className="h-4 w-4" />;
       case 'storage': return <HardDrive className="h-4 w-4" />;
     }
@@ -44,7 +44,7 @@ export function UsageWarning({ type, className }: UsageWarningProps) {
 
   const getTitle = () => {
     switch (type) {
-      case 'uploads': return 'Upload Limit';
+      case 'files': return 'Upload Limit';
       case 'tts': return 'TTS Limit';
       case 'storage': return 'Storage Limit';
     }

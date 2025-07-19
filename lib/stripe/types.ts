@@ -5,12 +5,12 @@ export type PlanType = 'free' | 'personal' | 'professional' | 'enterprise';
 
 export interface UsageData {
   current: {
-    uploads: number;
+    totalFiles: number;
     ttsCharacters: number;
     storageGB: number;
   };
   limits: {
-    uploads: number;
+    maxFiles: number;
     ttsCharacters: number;
     storageGB: number;
   };
@@ -47,12 +47,12 @@ export interface UsageCheckResult {
   remaining?: number;
   error?: string;
   currentUsage?: {
-    uploads: number;
+    totalFiles: number;
     ttsCharacters: number;
     storageGB: number;
   };
   limits?: {
-    uploads: number;
+    maxFiles: number;
     ttsCharacters: number;
     storageGB: number;
   };

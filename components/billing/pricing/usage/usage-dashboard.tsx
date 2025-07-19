@@ -3,7 +3,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useUsage } from "@/hooks/useSubscription";
 import { Progress } from "@radix-ui/react-progress";
-import { AlertTriangle, Upload, Volume2, HardDrive, Zap, Link, ArrowRight } from "lucide-react";
+import {
+  AlertTriangle,
+  Upload,
+  Volume2,
+  HardDrive,
+  Zap,
+  Link,
+  ArrowRight,
+} from "lucide-react";
 
 export function UsageDashboard() {
   const { usage, loading, error, refreshUsage } = useUsage();
@@ -25,8 +33,12 @@ export function UsageDashboard() {
       <Alert variant="destructive">
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
-          Failed to load usage data. 
-          <Button variant="link" onClick={refreshUsage} className="p-0 h-auto ml-1">
+          Failed to load usage data.
+          <Button
+            variant="link"
+            onClick={refreshUsage}
+            className="p-0 h-auto ml-1"
+          >
             Try again
           </Button>
         </AlertDescription>
@@ -38,29 +50,29 @@ export function UsageDashboard() {
 
   const usageItems = [
     {
-      type: 'uploads' as const,
+      type: "files" as const, // Changed from 'uploads'
       icon: <Upload className="h-4 w-4" />,
-      label: 'File Uploads',
-      current: usage.current.uploads,
-      limit: usage.limits.uploads,
-      unit: 'files'
+      label: "Total Files", // Changed from 'File Uploads'
+      current: usage.current.totalFiles,
+      limit: usage.limits.maxFiles,
+      unit: "files", // Changed from ''
     },
     {
-      type: 'tts' as const,
+      type: "tts" as const,
       icon: <Volume2 className="h-4 w-4" />,
-      label: 'TTS Characters',
+      label: "TTS Characters",
       current: usage.current.ttsCharacters,
       limit: usage.limits.ttsCharacters,
-      unit: 'chars'
+      unit: "chars",
     },
     {
-      type: 'storage' as const,
+      type: "storage" as const,
       icon: <HardDrive className="h-4 w-4" />,
-      label: 'Storage',
+      label: "Storage",
       current: usage.current.storageGB,
       limit: usage.limits.storageGB,
-      unit: 'GB'
-    }
+      unit: "GB",
+    },
   ];
 
   return (
@@ -75,9 +87,12 @@ export function UsageDashboard() {
 
       <div className="grid gap-4">
         {usageItems.map((item) => {
-          const percentage = item.limit === -1 ? 0 : Math.min((item.current / item.limit) * 100, 100);
+          const percentage =
+            item.limit === -1
+              ? 0
+              : Math.min((item.current / item.limit) * 100, 100);
           const isUnlimited = item.limit === -1;
-          
+
           return (
             <div key={item.type} className="space-y-2">
               <div className="flex items-center justify-between text-sm">
@@ -86,30 +101,28 @@ export function UsageDashboard() {
                   <span className="font-medium">{item.label}</span>
                 </div>
                 <span className="text-muted-foreground">
-                  {item.type === 'tts' && item.current > 1000 
+                  {item.type === "tts" && item.current > 1000
                     ? `${(item.current / 1000).toFixed(0)}k`
-                    : item.current.toLocaleString()
-                  }
+                    : item.current.toLocaleString()}
                   {!isUnlimited && (
                     <>
-                      {' / '}
-                      {item.type === 'tts' && item.limit > 1000 
+                      {" / "}
+                      {item.type === "tts" && item.limit > 1000
                         ? `${(item.limit / 1000).toFixed(0)}k`
-                        : item.limit.toLocaleString()
-                      }
+                        : item.limit.toLocaleString()}
                     </>
-                  )}
-                  {' '}{item.unit}
+                  )}{" "}
+                  {item.unit}
                 </span>
               </div>
-              
+
               {!isUnlimited && (
-                <Progress 
-                  value={percentage} 
-                  className={percentage >= 90 ? 'bg-destructive/20' : ''}
+                <Progress
+                  value={percentage}
+                  className={percentage >= 90 ? "bg-destructive/20" : ""}
                 />
               )}
-              
+
               {isUnlimited && (
                 <div className="text-xs text-muted-foreground">
                   Unlimited usage
@@ -120,7 +133,7 @@ export function UsageDashboard() {
         })}
       </div>
 
-      {usage.planName === 'free' && (
+      {usage.planName === "free" && (
         <div className="pt-4 border-t">
           <Button asChild className="w-full gap-2">
             <Link href="/pricing">

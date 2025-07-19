@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check upload usage limit BEFORE processing
-    const uploadCheck = await checkUsageLimit(user.id, 'upload', 1);
+    const uploadCheck = await checkUsageLimit(user.id, 'files', 1);
     if (!uploadCheck.allowed) {
       return NextResponse.json({ 
         error: uploadCheck.error,
@@ -105,10 +105,10 @@ export async function POST(request: NextRequest) {
 
       // Usage is automatically incremented by database trigger
       // But we can also track it manually for immediate feedback
-      await incrementUsage(user.id, 'upload', 1, file.size);
+      await incrementUsage(user.id, 'files', 1, file.size);
 
       // Get updated usage info for response
-      const updatedUploadCheck = await checkUsageLimit(user.id, 'upload', 0);
+      const updatedUploadCheck = await checkUsageLimit(user.id, 'files', 0);
       const updatedStorageCheck = await checkUsageLimit(user.id, 'storage', 0);
 
       return NextResponse.json({
@@ -117,15 +117,15 @@ export async function POST(request: NextRequest) {
         message: 'File uploaded successfully',
         usageInfo: {
           remaining: {
-            uploads: updatedUploadCheck.remaining || 0,
+            files: updatedUploadCheck.remaining || 0,
             storageGB: updatedStorageCheck.remaining || 0
           },
           current: {
-            uploads: updatedUploadCheck.currentUsage?.uploads || 0,
+            totalFiles: updatedUploadCheck.currentUsage?.totalFiles || 0,
             storageGB: updatedStorageCheck.currentUsage?.storageGB || 0
           },
           limits: {
-            uploads: updatedUploadCheck.limits?.uploads || 0,
+            maxFiles: updatedUploadCheck.limits?.maxFiles || 0,
             storageGB: updatedStorageCheck.limits?.storageGB || 0
           },
           planName: uploadCheck.planName || 'free'

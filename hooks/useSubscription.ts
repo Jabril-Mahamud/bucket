@@ -116,25 +116,25 @@ export function useUsage() {
   const usage = subscription?.usage;
   const planName = usage?.planName || 'free';
   
-  const getUsagePercentage = useCallback((type: 'uploads' | 'ttsCharacters' | 'storageGB') => {
+  const getUsagePercentage = useCallback((type: 'totalFiles' | 'ttsCharacters' | 'storageGB') => {
     if (!usage) return 0;
     
     const current = usage.current[type];
-    const limit = usage.limits[type];
+    const limit = usage.limits[type === 'totalFiles' ? 'maxFiles' : type];
     
     if (limit === -1) return 0; // Unlimited
     return Math.min((current / limit) * 100, 100);
   }, [usage]);
 
-  const isNearLimit = useCallback((type: 'uploads' | 'ttsCharacters' | 'storageGB', threshold = 80) => {
+  const isNearLimit = useCallback((type: 'totalFiles' | 'ttsCharacters' | 'storageGB', threshold = 80) => {
     return getUsagePercentage(type) >= threshold;
   }, [getUsagePercentage]);
 
-  const getRemainingUsage = useCallback((type: 'uploads' | 'ttsCharacters' | 'storageGB') => {
+  const getRemainingUsage = useCallback((type: 'totalFiles' | 'ttsCharacters' | 'storageGB') => {
     if (!usage) return 0;
     
     const current = usage.current[type];
-    const limit = usage.limits[type];
+    const limit = usage.limits[type === 'totalFiles' ? 'maxFiles' : type];
     
     if (limit === -1) return Infinity; // Unlimited
     return Math.max(0, limit - current);

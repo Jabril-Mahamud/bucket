@@ -1,20 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Check, 
-  Zap, 
-  Star, 
-  Crown, 
+import {
+  Check,
+  Zap,
+  Star,
+  Crown,
   Loader2,
   Upload,
   Volume2,
   HardDrive,
   FileText,
-  ArrowRight
+  ArrowRight,
 } from "lucide-react";
 import { useSubscription } from "@/hooks/useSubscription";
 import { createClient } from "@/lib/supabase/client";
@@ -24,104 +30,104 @@ import { User } from "@supabase/supabase-js";
 
 const plans = [
   {
-    id: 'free',
-    name: 'Free',
+    id: "free",
+    name: "Free",
     price: 0,
-    period: 'Forever',
-    description: 'Perfect for getting started',
+    period: "Forever",
+    description: "Perfect for getting started",
     icon: FileText,
-    color: 'text-slate-600',
-    bgColor: 'bg-slate-100',
+    color: "text-slate-600",
+    bgColor: "bg-slate-100",
     popular: false,
     limits: {
-      uploads: 5,
+      maxFiles: 20, // Changed from uploads: 5
       ttsCharacters: 25000,
       storageGB: 1,
     },
     features: [
-      '5 uploads per month',
-      '25K TTS characters',
-      '1GB storage',
-      'Basic file formats',
-      'Document conversion',
-      'Progress tracking',
+      '20 files total',
+      "25K TTS characters",
+      "1GB storage",
+      "Basic file formats",
+      "Document conversion",
+      "Progress tracking",
     ],
   },
   {
-    id: 'personal',
-    name: 'Personal',
+    id: "personal",
+    name: "Personal",
     price: 999,
-    period: 'per month',
-    description: 'For serious readers and learners',
+    period: "per month",
+    description: "For serious readers and learners",
     icon: Zap,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-100',
+    color: "text-blue-600",
+    bgColor: "bg-blue-100",
     popular: true,
     limits: {
-      uploads: 100,
+      maxFiles: 100,
       ttsCharacters: 200000,
       storageGB: 2,
     },
     features: [
-      '100 uploads per month',
-      '200K TTS characters',
-      '2GB storage',
-      'All file formats',
-      'Advanced TTS voices',
-      'Cloud sync',
-      'Priority support',
+      "100 files total",
+      "200K TTS characters",
+      "2GB storage",
+      "All file formats",
+      "Advanced TTS voices",
+      "Cloud sync",
+      "Priority support",
     ],
   },
   {
-    id: 'professional',
-    name: 'Professional',
+    id: "professional",
+    name: "Professional",
     price: 1999,
-    period: 'per month',
-    description: 'For power users and content creators',
+    period: "per month",
+    description: "For power users and content creators",
     icon: Star,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-100',
+    color: "text-purple-600",
+    bgColor: "bg-purple-100",
     popular: false,
     limits: {
-      uploads: 500,
+      maxFiles: 500,
       ttsCharacters: 1000000,
       storageGB: 10,
     },
     features: [
-      '500 uploads per month',
-      '1M TTS characters',
-      '10GB storage',
-      'Advanced search',
-      'Collections & tags',
-      'Bulk operations',
-      'API access',
-      'Analytics dashboard',
+      "500 files total",
+      "1M TTS characters",
+      "10GB storage",
+      "Advanced search",
+      "Collections & tags",
+      "Bulk operations",
+      "API access",
+      "Analytics dashboard",
     ],
   },
   {
-    id: 'enterprise',
-    name: 'Enterprise',
+    id: "enterprise",
+    name: "Enterprise",
     price: 3999,
-    period: 'per month',
-    description: 'For teams and organizations',
+    period: "per month",
+    description: "For teams and organizations",
     icon: Crown,
-    color: 'text-amber-600',
-    bgColor: 'bg-amber-100',
+    color: "text-amber-600",
+    bgColor: "bg-amber-100",
     popular: false,
     limits: {
-      uploads: -1, // Unlimited
+      maxFiles: -1, // Unlimited
       ttsCharacters: 3000000,
       storageGB: 50,
     },
     features: [
-      'Unlimited uploads',
-      '3M TTS characters',
-      '50GB storage',
-      'Team collaboration',
-      'Advanced permissions',
-      'Custom integrations',
-      'Dedicated support',
-      'SLA guarantee',
+      "Unlimited files",
+      "3M TTS characters",
+      "50GB storage",
+      "Team collaboration",
+      "Advanced permissions",
+      "Custom integrations",
+      "Dedicated support",
+      "SLA guarantee",
     ],
   },
 ];
@@ -136,7 +142,9 @@ export function PricingSection() {
   // Check auth status
   useState(() => {
     const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       setUser(user);
     };
     checkAuth();
@@ -144,20 +152,20 @@ export function PricingSection() {
 
   const handlePlanSelect = async (planId: string) => {
     if (!user) {
-      router.push('/auth/login?redirect=/pricing');
+      router.push("/auth/login?redirect=/pricing");
       return;
     }
 
-    if (planId === 'free') {
-      router.push('/library');
+    if (planId === "free") {
+      router.push("/library");
       return;
     }
 
     setLoading(planId);
     try {
-      await upgradeToplan(planId as 'personal' | 'professional' | 'enterprise');
+      await upgradeToplan(planId as "personal" | "professional" | "enterprise");
     } catch (error) {
-      console.error('Upgrade error:', error);
+      console.error("Upgrade error:", error);
     } finally {
       setLoading(null);
     }
@@ -168,14 +176,14 @@ export function PricingSection() {
   };
 
   const formatNumber = (num: number) => {
-    if (num === -1) return 'Unlimited';
+    if (num === -1) return "Unlimited";
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(0)}K`;
     return num.toString();
   };
 
   const getCurrentPlan = () => {
-    return subscription?.subscription?.plan_name || 'free';
+    return subscription?.subscription?.plan_name || "free";
   };
 
   const isCurrentPlan = (planId: string) => {
@@ -184,7 +192,7 @@ export function PricingSection() {
 
   const canUpgrade = (planId: string) => {
     const currentPlan = getCurrentPlan();
-    const planOrder = ['free', 'personal', 'professional', 'enterprise'];
+    const planOrder = ["free", "personal", "professional", "enterprise"];
     const currentIndex = planOrder.indexOf(currentPlan);
     const targetIndex = planOrder.indexOf(planId);
     return targetIndex > currentIndex;
@@ -207,12 +215,12 @@ export function PricingSection() {
       {/* Plans Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {plans.map((plan) => (
-          <Card 
-            key={plan.id} 
+          <Card
+            key={plan.id}
             className={`relative transition-all duration-200 hover:shadow-lg ${
-              plan.popular 
-                ? 'ring-2 ring-primary shadow-lg scale-105' 
-                : 'hover:scale-105'
+              plan.popular
+                ? "ring-2 ring-primary shadow-lg scale-105"
+                : "hover:scale-105"
             }`}
           >
             {plan.popular && (
@@ -224,17 +232,23 @@ export function PricingSection() {
             )}
 
             <CardHeader className="text-center pb-4">
-              <div className={`w-12 h-12 ${plan.bgColor} rounded-lg flex items-center justify-center mx-auto mb-4`}>
+              <div
+                className={`w-12 h-12 ${plan.bgColor} rounded-lg flex items-center justify-center mx-auto mb-4`}
+              >
                 <plan.icon className={`h-6 w-6 ${plan.color}`} />
               </div>
               <CardTitle className="text-xl font-bold">{plan.name}</CardTitle>
               <div className="space-y-1">
                 <div className="text-3xl font-bold">
-                  {plan.price === 0 ? 'Free' : formatPrice(plan.price)}
+                  {plan.price === 0 ? "Free" : formatPrice(plan.price)}
                 </div>
-                <div className="text-sm text-muted-foreground">{plan.period}</div>
+                <div className="text-sm text-muted-foreground">
+                  {plan.period}
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground">{plan.description}</p>
+              <p className="text-sm text-muted-foreground">
+                {plan.description}
+              </p>
             </CardHeader>
 
             <CardContent className="space-y-4">
@@ -243,23 +257,29 @@ export function PricingSection() {
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <Upload className="h-4 w-4 text-blue-600" />
-                    <span>Monthly uploads</span>
+                    <span>Total files</span>
                   </div>
-                  <span className="font-semibold">{formatNumber(plan.limits.uploads)}</span>
+                  <span className="font-semibold">
+                    {formatNumber(plan.limits.maxFiles)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <Volume2 className="h-4 w-4 text-purple-600" />
                     <span>TTS characters</span>
                   </div>
-                  <span className="font-semibold">{formatNumber(plan.limits.ttsCharacters)}</span>
+                  <span className="font-semibold">
+                    {formatNumber(plan.limits.ttsCharacters)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <HardDrive className="h-4 w-4 text-green-600" />
                     <span>Storage</span>
                   </div>
-                  <span className="font-semibold">{plan.limits.storageGB}GB</span>
+                  <span className="font-semibold">
+                    {plan.limits.storageGB}GB
+                  </span>
                 </div>
               </div>
 
@@ -280,7 +300,7 @@ export function PricingSection() {
                   Current Plan
                 </Button>
               ) : canUpgrade(plan.id) ? (
-                <Button 
+                <Button
                   onClick={() => handlePlanSelect(plan.id)}
                   disabled={loading === plan.id || isUpgrading}
                   className="w-full gap-2"
@@ -295,12 +315,8 @@ export function PricingSection() {
                     </>
                   )}
                 </Button>
-              ) : plan.id === 'free' ? (
-                <Button 
-                  asChild
-                  variant="outline" 
-                  className="w-full"
-                >
+              ) : plan.id === "free" ? (
+                <Button asChild variant="outline" className="w-full">
                   <Link href="/auth/sign-up">Get Started Free</Link>
                 </Button>
               ) : (
@@ -320,29 +336,32 @@ export function PricingSection() {
           <div className="space-y-4">
             <h3 className="font-semibold">Can I change plans anytime?</h3>
             <p className="text-muted-foreground text-sm">
-              Yes! You can upgrade or downgrade your plan at any time. Changes take effect immediately, 
-              and we&apos;ll prorate the billing accordingly.
+              Yes! You can upgrade or downgrade your plan at any time. Changes
+              take effect immediately, and we&apos;ll prorate the billing
+              accordingly.
             </p>
           </div>
           <div className="space-y-4">
-            <h3 className="font-semibold">What happens to my files if I downgrade?</h3>
+            <h3 className="font-semibold">
+              What happens to my files if I downgrade?
+            </h3>
             <p className="text-muted-foreground text-sm">
-              Your files remain safe. You&apos;ll just have lower monthly limits going forward. 
-              Existing files won&apos;t be deleted.
+              Your files remain safe. You&apos;ll just have lower monthly limits
+              going forward. Existing files won&apos;t be deleted.
             </p>
           </div>
           <div className="space-y-4">
             <h3 className="font-semibold">How does TTS billing work?</h3>
             <p className="text-muted-foreground text-sm">
-              TTS characters reset monthly. Unused characters don&apos;t roll over, 
-              but you can always upgrade mid-month for more capacity.
+              TTS characters reset monthly. Unused characters don&apos;t roll
+              over, but you can always upgrade mid-month for more capacity.
             </p>
           </div>
           <div className="space-y-4">
             <h3 className="font-semibold">Is there a free trial?</h3>
             <p className="text-muted-foreground text-sm">
-              The Free plan is permanent and includes core features. You can start there 
-              and upgrade when you need more capacity.
+              The Free plan is permanent and includes core features. You can
+              start there and upgrade when you need more capacity.
             </p>
           </div>
         </div>
@@ -350,9 +369,12 @@ export function PricingSection() {
 
       {/* CTA Section */}
       <div className="text-center space-y-6 mt-16 p-8 bg-primary/5 rounded-2xl">
-        <h2 className="text-2xl font-bold">Ready to organize your digital library?</h2>
+        <h2 className="text-2xl font-bold">
+          Ready to organize your digital library?
+        </h2>
         <p className="text-muted-foreground max-w-md mx-auto">
-          Join thousands of users who have revolutionized how they manage and consume content.
+          Join thousands of users who have revolutionized how they manage and
+          consume content.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button asChild size="lg" className="gap-2">
@@ -362,9 +384,7 @@ export function PricingSection() {
             </Link>
           </Button>
           <Button asChild variant="outline" size="lg">
-            <Link href="/library">
-              Browse Demo
-            </Link>
+            <Link href="/library">Browse Demo</Link>
           </Button>
         </div>
       </div>

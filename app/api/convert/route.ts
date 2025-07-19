@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check usage limits BEFORE processing
-    const uploadCheck = await checkUsageLimit(user.id, 'upload', 1);
+    const uploadCheck = await checkUsageLimit(user.id, 'files', 1);
     if (!uploadCheck.allowed) {
       return NextResponse.json({ 
         error: uploadCheck.error,

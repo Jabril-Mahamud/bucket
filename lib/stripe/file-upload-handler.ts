@@ -25,7 +25,7 @@ export async function handleFileUpload(
   const supabase = await createClient();
 
   // Check upload limit
-  const uploadCheck = await checkUsageLimit(user.id, 'upload', 1);
+  const uploadCheck = await checkUsageLimit(user.id, 'files', 1);
   if (!uploadCheck.allowed) {
     return {
       success: false,

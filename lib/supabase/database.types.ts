@@ -310,22 +310,22 @@ export type Database = {
       plan_limits: {
         Row: {
           features: Json | null
+          max_files: number
           monthly_tts_characters: number
-          monthly_uploads: number
           plan_name: string
           storage_gb: number
         }
         Insert: {
           features?: Json | null
+          max_files: number
           monthly_tts_characters: number
-          monthly_uploads: number
           plan_name: string
           storage_gb: number
         }
         Update: {
           features?: Json | null
+          max_files?: number
           monthly_tts_characters?: number
-          monthly_uploads?: number
           plan_name?: string
           storage_gb?: number
         }

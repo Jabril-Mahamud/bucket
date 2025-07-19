@@ -4,7 +4,7 @@ import { useUsage } from "@/lib/stripe/contexts/usage-context";
 import { AlertTriangle, Link } from "lucide-react";
 
 interface UsageGateProps {
-  type: 'uploads' | 'tts' | 'storage';
+  type: 'files' | 'tts' | 'storage';
   requiredAmount?: number; // For storage: bytes, for TTS: characters, for uploads: count
   children: React.ReactNode;
   fallback?: React.ReactNode;
@@ -17,7 +17,7 @@ export function UsageGate({ type, requiredAmount = 1, children, fallback }: Usag
   let reason = '';
 
   switch (type) {
-    case 'uploads':
+    case 'files':
       const uploadCheck = checkCanUpload();
       canProceed = uploadCheck.allowed;
       reason = uploadCheck.reason || '';
